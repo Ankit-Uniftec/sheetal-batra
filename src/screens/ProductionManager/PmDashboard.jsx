@@ -437,6 +437,28 @@ export default function PmDashboard() {
   );
 }
 
+const MEASURE_LABELS = {
+  KurtaChogaKaftan: "Kurta / Choga / Kaftan", Blouse: "Blouse", Anarkali: "Anarkali", SalwarDhoti: "Salwar / Dhoti",
+  ChuridaarTrouserPantsPlazo: "Churidaar / Trouser / Pants / Plazo", ShararaGharara: "Sharara / Gharara", Lehenga: "Lehenga",
+};
+/** The client's measurements on a product, grouped by garment, in inches. */
+function Measurements({ m }) {
+  const groups = Object.entries(m || {}).filter(([, f]) => f && typeof f === "object" && Object.values(f).some((v) => v !== "" && v != null));
+  if (!groups.length) return <small className="pm-muted">No measurements recorded (standard size).</small>;
+  return (
+    <div className="pm-measure">
+      {groups.map(([k, f]) => (
+        <div key={k} className="pm-measure-group">
+          <span>{MEASURE_LABELS[k] || k} (in)</span>
+          <div className="pm-measure-chips">
+            {Object.entries(f).filter(([, v]) => v !== "" && v != null).map(([name, v]) => <i key={name}><small>{name}</small>{v}</i>)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** One order in the side panel: where it stands, its pieces, and every action. */
 function OrderDrawer({ order: o, ctx, onClose, onBack }) {
   const comps = ctx.componentsByOrder[o.id] || [];
@@ -451,7 +473,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
   const canAct = running && String(o.status || "").toLowerCase() !== "cancelled";
   const who = clientOf(o, ctx.vendorMap);
   return (
-    <Drawer title={o.order_no} sub={[who, channelOf(o)].filter(Boolean).join(" · ")} onClose={onClose} onBack={onBack}>
+    <Drawer wide title={o.order_no} sub={[who, channelOf(o)].filter(Boolean).join(" · ")} onClose={onClose} onBack={onBack}>
       <div className="ceo-dstats">
         <Stat label="Status" info="Where the order stands, worked out from its pieces."><b>{status}</b></Stat>
         <Stat label="Due Date" info="The warehouse date: two days before the client's delivery date.">
@@ -479,6 +501,8 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
         <div className="pm-halfmade"><HalfMadeBadge order={o} suggestions={ctx.halfMade.byOrder[o.id]} by={ctx.halfMade.me?.email} onUsed={ctx.halfMade.reload} /></div>
       )}
 
+      <div className="pm-od-grid">
+      <div className="pm-od-col">
       <p className="pm-dsection">Pieces</p>
       <div className="pm-pieces">
         {!comps.length && <p className="ceo-muted">No barcoded pieces yet.</p>}
@@ -496,19 +520,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
         ))}
       </div>
 
-      <p className="pm-dsection">Products</p>
-      <div className="ceo-ditems">
-        {(o.items || []).map((it, i) => (
-          <div key={`${it.product_name}-${i}`} className="gm-item">
-            <Thumb src={it.image_url} alt={it.product_name} />
-            <span>
-              <b>{it.product_name || "–"}</b>
-              <small>{[it.top && `${it.top}${it.top_color?.name ? ` (${it.top_color.name})` : ""}`, it.bottom && `${it.bottom}${it.bottom_color?.name ? ` (${it.bottom_color.name})` : ""}`, it.size && `Size ${it.size}`, Number(it.quantity) > 1 && `Qty ${it.quantity}`].filter(Boolean).join(" · ")}</small>
-              {Array.isArray(it.extras) && it.extras.length > 0 && <small>Extras: {it.extras.map((e) => `${e.name}${e.color?.name ? ` (${e.color.name})` : ""}`).join(", ")}</small>}
-            </span>
-          </div>
-        ))}
-      </div>
+      <p className="pm-dsection">Order Details</p>
 
       <dl className="ceo-dl">
         <dt>Channel</dt><dd>{channelOf(o)}</dd>
@@ -524,6 +536,27 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
         <dt>Pieces</dt><dd>{piecesLine(comps)}</dd>
         <dt>Pieces in total</dt><dd>{num(live.length)}</dd>
       </dl>
+      </div>
+
+      <div className="pm-od-col">
+      <p className="pm-dsection">Products</p>
+      <div className="pm-products">
+        {(o.items || []).map((it, i) => (
+          <div key={`${it.product_name}-${i}`} className="pm-product">
+            <Thumb src={it.image_url} alt={it.product_name} large />
+            <div className="pm-product-body">
+              <b>{it.product_name || "–"}</b>
+              <small>{[it.top && `${it.top}${it.top_color?.name ? ` (${it.top_color.name})` : ""}`, it.bottom && `${it.bottom}${it.bottom_color?.name ? ` (${it.bottom_color.name})` : ""}`, it.size && `Size ${it.size}`, Number(it.quantity) > 1 && `Qty ${it.quantity}`].filter(Boolean).join(" · ")}</small>
+              {it.dupatta_color && <small>Dupatta: {typeof it.dupatta_color === "object" ? it.dupatta_color.name : it.dupatta_color}</small>}
+              {Array.isArray(it.extras) && it.extras.length > 0 && <small>Extras: {it.extras.map((e) => `${e.name}${e.color?.name ? ` (${e.color.name})` : ""}`).join(", ")}</small>}
+              {it.notes && <small>Note: {it.notes}</small>}
+              <Measurements m={it.measurements} />
+            </div>
+          </div>
+        ))}
+      </div>
+      </div>
+      </div>
     </Drawer>
   );
 }

@@ -105,7 +105,12 @@ export default function StockPage({ ctx }) {
     // Stock orders made for designs Stock Room does not hold as stock (made to order).
     const madeToOrderMaking = making.designs.filter((d) => d.productId && view.rowsById[d.productId]?.type === TYPE_MTO);
     const mtoPieces = madeToOrderMaking.reduce((a, d) => a + d.value, 0);
-    return { stocked, counted, next, makeNext, bySize, withStock: counted.filter((r) => pcs(r) > 0), mtoPieces, madeToOrderMaking };
+    // Stock that has not sold in 90 days, and sizes that sell faster than they are held.
+    const slow = counted.filter((r) => pcs(r) > 0 && r.sold90 === 0);
+    const soldBySize = view.sales?.trackedBySize || {};
+    const sizeGap = sortSizes(Object.keys(soldBySize)).map((sz) => ({ size: sz, sold: soldBySize[sz] || 0, held: held[sz] || 0 }))
+      .filter((x) => x.sold > 0 && x.size !== "Custom").sort((a, b) => (b.sold - b.held) - (a.sold - a.held))[0] || null;
+    return { stocked, counted, next, makeNext, bySize, withStock: counted.filter((r) => pcs(r) > 0), mtoPieces, madeToOrderMaking, slow, sizeGap };
   }, [view, making]);
 
   const list = useMemo(() => {
@@ -154,6 +159,8 @@ export default function StockPage({ ctx }) {
             <Insight><b>{num(t.trackedUnits)}</b> finished pieces are in stock across <b>{num(data.withStock.length)}</b> designs; {num(t.low)} designs are low and {num(t.out)} are out of stock{outSold.length ? <>, <b>{num(outSold.length)}</b> of which sold in the last 90 days</> : null}.</Insight>
             {top && <Insight tone="warn">Most urgent to make: <b>{top.product.name}</b>. It sold {plural(top.sold90, "piece")} in 90 days, has {num(pcs(top))} in stock and {num(top.making)} being made, so it is short by about {num(top.short)}.</Insight>}
             <Insight tone={making.quiet.length ? "warn" : "gold"}>{num(making.running.length)} stock orders ({plural(making.pieces.length, "barcoded piece")}) are in production{making.byChannel.length ? <>: {making.byChannel.map((c) => `${num(c.value)} ${c.name.toLowerCase()}`).join(", ")}</> : null}.{making.quiet.length ? <> <b>{num(making.quiet.length)}</b> of them have had nothing scanned for 30 days or more.</> : null}</Insight>
+            {data.slow.length > 0 && <Insight tone="warn"><b>{num(data.slow.reduce((a, r) => a + pcs(r), 0))}</b> pieces across <b>{plural(data.slow.length, "design")}</b> have not sold in the last 90 days; check those before making more of the same.{" "}<button type="button" className="ceo-link" onClick={() => { setLevel(""); setType(""); setSearch(""); setDesign(null); document.querySelector(".pms-list")?.scrollIntoView({ behavior: "smooth" }); }}>See designs in stock</button></Insight>}
+            {data.sizeGap && data.sizeGap.sold > data.sizeGap.held && <Insight>Size <b>{data.sizeGap.size}</b> sells fastest against what is held: {plural(data.sizeGap.sold, "piece")} sold in 90 days and {num(data.sizeGap.held)} in stock across LXRTS designs.</Insight>}
             {data.mtoPieces > 0 && <Insight tone="warn"><b>{num(data.mtoPieces)}</b> of the {num(making.designs.reduce((a, d) => a + d.value, 0))} garments ordered on running stock orders are made-to-order designs ({num(data.madeToOrderMaking.length)} designs). Stock Room does not hold made-to-order designs as stock, so finishing them will not raise the counts on this page.</Insight>}
             {halfMade && <Insight>{hmOpen.length ? <><b>{plural(hmOpen.length, "Half Made piece")}</b> {hmOpen.length === 1 ? "is" : "are"} waiting to be finished for another order.</> : <>No Half Made pieces are waiting; {plural((halfMade || []).length, "piece")} recorded so far {(halfMade || []).length === 1 ? "has" : "have"} been used or written off.</>}</Insight>}
           </div>

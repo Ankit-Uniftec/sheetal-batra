@@ -3,7 +3,8 @@ import { HalfMadeBanner } from "../../components/HalfMadeSuggestion";
 import { STAGE_GROUPS } from "../../utils/barcodeService";
 import { Chips, FilterGroup, PageHead, Pager, Seg, num } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, ListTools, PeriodFacet, usePagePeriod } from "../CeoDashboard/dashKit";
-import { DueCell, OrderCell, Table, exportOrders, orderStatus, piecesLine } from "./PmCommon";
+import { exportOrders } from "./PmCommon";
+import OrderRows from "./PmOrderRows";
 import {
   atVendor, atWh2, channelOf, clientOf, daysLeft, dueDay, dueIn, floorKey, hasPromise, isDormant, isLate, isRunning, isUrgent, overdueDays, pieceState, productsOf,
   statusOf, todayStart,
@@ -139,30 +140,7 @@ export default function OrdersPage({ ctx }) {
         onExport={() => exportOrders(`orders ${tabLabel}`, list, ctx)} exportDisabled={!list.length}
       />
       <section className="ceo-card">
-        <Table
-          rowKey={(r) => r.id}
-          rows={list.slice((page - 1) * PAGE, page * PAGE)}
-          onRow={ctx.openOrder}
-          empty="No orders match."
-          columns={[
-            { key: "order", label: "Order", render: (o) => <OrderCell o={o} ctx={ctx} /> },
-            { key: "channel", label: "Channel", lap: true, render: (o) => channelOf(o) },
-            {
-              key: "pieces", label: "Status", hide: true, render: (o) => {
-                const comps = (componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at);
-                const done = comps.filter((c) => pieceState(c) === "finished").length;
-                return (
-                  <span className="pm-cell">
-                    <b>{orderStatus(o, componentsByOrder[o.id])}</b>
-                    <small>{piecesLine(componentsByOrder[o.id])}</small>
-                    {comps.length > 0 && <span className="pm-mini-bar"><i style={{ width: `${(done / comps.length) * 100}%` }} /></span>}
-                  </span>
-                );
-              },
-            },
-            { key: "due", label: "Due Date", right: true, render: (o) => <DueCell o={o} /> },
-          ]}
-        />
+        <OrderRows ctx={ctx} rows={list.slice((page - 1) * PAGE, page * PAGE)} />
         <Pager page={page} pages={Math.ceil(list.length / PAGE)} onChange={setPage} />
         <p className="pm-count-line">{summary}</p>
       </section>

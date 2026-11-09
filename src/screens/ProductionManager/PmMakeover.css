@@ -280,3 +280,54 @@
 .ceo.pm .pmb-act-body p b { font-weight: 600; color: var(--ceo-ink) !important; }
 .ceo.pm .pmb-act-body .pmb-go { margin-left: -10px; }
 @media (max-width: 900px) { .ceo.pm .pmb-acts { grid-template-columns: 1fr; } }
+
+/* ---------- Wider side panels; the order panel in two columns ---------- */
+.ceo.pm .ceo-drawer.is-wide { width: min(1040px, 100%); }
+.ceo.pm .pm-od-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.ceo.pm .pm-od-col { min-width: 0; }
+.ceo.pm .pm-products { display: flex; flex-direction: column; gap: 12px; }
+.ceo.pm .pm-product { display: grid; grid-template-columns: 92px 1fr; gap: 14px; padding: 12px; background: #fff; border: 1px solid var(--ceo-line); border-radius: 12px; }
+.ceo.pm .pm-product .ceo-thumb { width: 92px; height: 118px; object-fit: cover; border-radius: 10px; }
+.ceo.pm .pm-product-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ceo.pm .pm-product-body b { font-weight: 500; }
+.ceo.pm .pm-product-body small { font-size: 12.5px; color: var(--ceo-ink-3) !important; }
+.ceo.pm .pm-measure { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.ceo.pm .pm-measure-group > span { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ceo-ink-3) !important; }
+.ceo.pm .pm-measure-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.ceo.pm .pm-measure-chips i { font-style: normal; display: inline-flex; flex-direction: column; padding: 4px 9px; background: #faf6ec; border-radius: 8px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ceo.pm .pm-measure-chips i small { font-size: 10.5px; font-weight: 400; color: var(--ceo-ink-3) !important; }
+@media (max-width: 860px) { .ceo.pm .pm-od-grid { grid-template-columns: 1fr; } }
+
+/* ---------- Orders: the full row, scrolling sideways when narrow ---------- */
+.ceo.pm .pmo-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ceo.pm .pmo-table { min-width: 1480px; }
+.ceo.pm .pmo-table td { vertical-align: top; padding-top: 12px; padding-bottom: 12px; }
+.ceo.pm .pmo-table .pmo-order { position: sticky; left: 0; z-index: 1; background: #fff; min-width: 210px; box-shadow: 1px 0 0 var(--ceo-line); }
+.ceo.pm .pmo-table th.pmo-order { background: #faf5e6; z-index: 2; }
+.ceo.pm .pmo-table tr.is-link:hover .pmo-order { background: #fffcf4; }
+.ceo.pm .pmo-ordercell { display: flex; gap: 10px; align-items: flex-start; }
+.ceo.pm .pmo-ordercell .ceo-thumb { width: 44px; height: 56px; flex-shrink: 0; border-radius: 8px; object-fit: cover; }
+.ceo.pm .pmo-ordercell > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ceo.pm .pmo-ordercell b { font-weight: 600; white-space: nowrap; }
+.ceo.pm .pmo-ordercell small { font-size: 12px; color: var(--ceo-ink-3) !important; }
+.ceo.pm .pmo-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.ceo.pm .pmo-products { min-width: 260px; max-width: 320px; }
+.ceo.pm .pmo-item + .pmo-item { margin-top: 8px; }
+.ceo.pm .pmo-client { min-width: 140px; }
+.ceo.pm .pmo-dates, .ceo.pm .pmo-delivery, .ceo.pm .pmo-due { min-width: 112px; white-space: nowrap; }
+.ceo.pm .pmo-due .pm-cell.is-right { align-items: flex-start; text-align: left; }
+.ceo.pm .pmo-status { min-width: 170px; }
+.ceo.pm .pmo-pieces { min-width: 230px; }
+.ceo.pm .pmo-chips { display: flex; flex-direction: column; gap: 4px; }
+.ceo.pm .pmo-chip { display: inline-flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--ceo-ink-2) !important; padding: 2px 8px; background: #faf6ec; border-radius: 6px; width: fit-content; }
+.ceo.pm .pmo-chip b { font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pmo-chip.is-finished { background: #eef4ea; }
+.ceo.pm .pmo-chip.is-at_vendor, .ceo.pm .pmo-chip.is-at_wh2 { background: #f6eedb; }
+.ceo.pm .pmo-chip.is-disposed { background: #f7ebe4; }
+.ceo.pm .pmo-sales { min-width: 130px; }
+.ceo.pm .pmo-btns { display: flex; flex-direction: column; gap: 6px; }
+.ceo.pm .pmo-btns .ceo-btn { height: 34px; white-space: nowrap; justify-content: flex-start; }
+
+/* A "What This Says" card above a shared panel. */
+.ceo.pm .pm-says-card { margin-bottom: 16px; }
+.ceo.pm .pm-says-title { font-size: 1.15rem; margin-bottom: 12px !important; }
