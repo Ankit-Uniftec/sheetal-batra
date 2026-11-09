@@ -124,13 +124,13 @@
 .cjm-legend i.is-todo { background: var(--st-up-soft); box-shadow: inset 0 0 0 1.5px var(--st-up); }
 
 /* The journey line. State colours:
-     Done      champagne gold   Now   blush rose (pulsing)
+     Done      champagne gold   Now   amber gold (pulsing)
      Skipped   dashed taupe     Upcoming  ivory with a sand ring
    Names sit below the circles and above them on every other stage, so each
    label has two slots of room. */
 .cjm-journey {
   --st-done: #d4ae55; --st-done-soft: #f7edd0; --st-done-text: #7e5f10;
-  --st-now: #cf7f6b; --st-now-soft: #fbe6df; --st-now-text: #a04a36;
+  --st-now: #b98a24; --st-now-soft: #fdf1d6; --st-now-text: #8a6512;
   --st-skip: #cdbf9f; --st-skip-text: #a39883;
   --st-up: #e3d9c1; --st-up-soft: #faf7f0; --st-up-text: #8c8476;
   container-type: inline-size; padding: 14px 16px 12px; border-radius: 14px; border: 1px solid var(--cjm-line); background: #fff;
@@ -168,11 +168,11 @@
 /* Now */
 .cjm-node.is-current .cjm-node-dot {
   width: 32px; height: 32px; background: var(--st-now-soft); color: var(--st-now-text) !important; font-size: 12.5px;
-  box-shadow: inset 0 0 0 2px var(--st-now), 0 0 0 4px rgba(251, 230, 223, .9);
+  box-shadow: inset 0 0 0 2px var(--st-now), 0 0 0 4px rgba(248, 230, 187, .9);
   animation: cjm-pulse 2.4s ease-in-out infinite;
 }
 .cjm-node.is-current .cjm-node-name { color: var(--st-now-text) !important; font-weight: 600; }
-@keyframes cjm-pulse { 0%, 100% { box-shadow: inset 0 0 0 2px var(--st-now), 0 0 0 4px rgba(251, 230, 223, .9); } 50% { box-shadow: inset 0 0 0 2px var(--st-now), 0 0 0 9px rgba(251, 230, 223, .6); } }
+@keyframes cjm-pulse { 0%, 100% { box-shadow: inset 0 0 0 2px var(--st-now), 0 0 0 4px rgba(248, 230, 187, .9); } 50% { box-shadow: inset 0 0 0 2px var(--st-now), 0 0 0 9px rgba(248, 230, 187, .6); } }
 .cjm-node.is-current.is-finished .cjm-node-dot { background: var(--st-done); color: #fff !important; animation: none; box-shadow: 0 0 0 4px var(--st-done-soft); }
 .cjm-node.is-current.is-finished .cjm-node-name { color: var(--st-done-text) !important; }
 .cjm-node.is-current.is-finished .cjm-node-now { color: var(--st-done-text) !important; background: var(--st-done-soft); }
@@ -196,7 +196,7 @@
 .cjm-stage-row.is-current:not(.is-finished) .cjm-stage-name i { background: var(--st-now-soft); box-shadow: inset 0 0 0 2px var(--st-now); }
 .cjm-stage-name em { font-style: normal; font-size: 9.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--st-now-text) !important; background: var(--st-now-soft); padding: 1px 7px; border-radius: 99px; }
 .cjm-stage-row.is-finished .cjm-stage-name em { color: var(--st-done-text) !important; background: var(--st-done-soft); }
-.cjm-stage-row.is-current:not(.is-finished) { background: #fdf3ef; border-radius: 8px; }
+.cjm-stage-row.is-current:not(.is-finished) { background: #fdf6e6; border-radius: 8px; }
 .cjm-stage-vendor { color: #8f5a2e !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Narrow space: a vertical timeline with the details inline. */
