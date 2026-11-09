@@ -788,6 +788,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
       </dl>
 
       <p className="pm-dsection">Products</p>
+      <small className="pm-od-hint">Click a piece to open its journey.</small>
       <div className="pm-products">
         {photo && <PhotoView photo={photo} onClose={() => setPhoto(null)} />}
         {(o.items || []).map((it, i) => {
@@ -802,7 +803,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
                 <small>{[it.size && `Size ${it.size}`, `Qty ${Number(it.quantity) || 1}`].filter(Boolean).join(" · ")}</small>
                 {it.notes && <small>Note: {it.notes}</small>}
                 {mine.length
-                  ? <div className="pmc-plist">{mine.map((c) => <PieceRow key={c.id} c={c} item={it} hexOf={hexOf} showStatus={false} />)}</div>
+                  ? <div className="pmc-plist">{mine.map((c) => <PieceRow key={c.id} c={c} item={it} hexOf={hexOf} onOpen={() => ctx.openJourney(o, c.id)} />)}</div>
                   : <small className="pm-muted">No pieces yet</small>}
               </div>
             </div>
@@ -811,23 +812,6 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
       </div>
       </div>
 
-      <aside className="pm-od-side">
-        <p className="pm-dsection">Pieces</p>
-        <small className="pm-od-hint">Click a piece to open its journey.</small>
-        <div className="pm-pieces">
-          {!comps.length && <p className="ceo-muted">No barcoded pieces yet.</p>}
-          {comps.map((c) => (
-            <button key={c.id} type="button" className={`pm-piece is-${pieceState(c)}`} onClick={() => ctx.openJourney(o, c.id)}>
-              <span className="pm-piece-main">
-                <b>{pieceName(c)}</b>
-                <small className="pm-code">{c.barcode}</small>
-              </span>
-              <span className="ceo-keep"><ComponentStageBadge comp={c} look="brand" /></span>
-              {c.is_outside_wh && <small className="pm-piece-vendor">At {c.vendor_name || "vendor"}{c.stages_outside ? ` · ${getStagesOutsideLabel(c.stages_outside) || ""}` : ""}</small>}
-            </button>
-          ))}
-        </div>
-      </aside>
       </div>
     </Drawer>
   );

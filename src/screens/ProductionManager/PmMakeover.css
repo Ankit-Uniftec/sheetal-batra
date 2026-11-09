@@ -891,3 +891,10 @@
   .ceo.pm .pm-product .pm-product-body { flex-basis: 100%; }
   .ceo.pm .pm-product .pmc-plist { grid-template-columns: minmax(0, 1fr); }
 }
+/* Order panel: one column; the product pieces open their journey. */
+.ceo.pm .pm-od-grid { grid-template-columns: minmax(0, 1fr); }
+.ceo.pm .pm-od-hint { display: block; margin: -6px 0 8px; }
+.ceo.pm .pmc-piece.is-link { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.ceo.pm .pmc-piece.is-link:hover, .ceo.pm .pmc-piece.is-link:focus-visible { border-color: #c9a23e; box-shadow: 0 6px 14px -10px rgba(70, 52, 12, .45); outline: none; }
+.ceo.pm .pmc-piece-id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ceo.pm .pmc-piece-id .pm-code { font-size: 11px; color: #8c8476 !important; font-weight: 500; }
