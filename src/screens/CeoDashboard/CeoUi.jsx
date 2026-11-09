@@ -751,7 +751,25 @@ export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder
       .forEach((c) => out.push({ key: `c${c.phone}`, kind: "Client", label: c.name, meta: shortInr(c.totalSpend), go: () => onClient(c) }));
     (products || []).filter((p) => norm(p.name).includes(t) || norm(p.sku_id).includes(t)).slice(0, 4)
       .forEach((p) => out.push({ key: `d${p.id}`, kind: "Design", label: p.name, meta: p.sku_id || "", go: () => onDesign(p) }));
-    (extra || []).filter((x) => norm(x.text).includes(t)).slice(0, 4).forEach((x) => out.push(x));
+    // Extra results: up to 4 of each kind (Client, Product, Piece, Vendor…). Best
+    // matches first: the text starting with what was typed, then a word starting
+    // with it, then anywhere in it. Kinds with the best match come first.
+    const score = (x) => {
+      const v = norm(x.text);
+      if (v.startsWith(t)) return 0;
+      if (v.includes(` ${t}`) || v.includes(`-${t}`) || v.includes(`(${t}`)) return 1;
+      return v.includes(t) ? 2 : -1;
+    };
+    const groups = {};
+    (extra || []).forEach((x, i) => {
+      const sc = score(x);
+      if (sc < 0) return;
+      (groups[x.kind] || (groups[x.kind] = [])).push({ x, sc, i });
+    });
+    Object.values(groups)
+      .map((list) => list.sort((a, b) => a.sc - b.sc || a.i - b.i).slice(0, 4))
+      .sort((a, b) => a[0].sc - b[0].sc || a[0].i - b[0].i)
+      .forEach((list) => list.forEach(({ x }) => out.push(x)));
     return out;
   }, [q, pages, orders, products, clients, onPage, onOrder, onClient, onDesign, extra]);
 

@@ -63,6 +63,13 @@ export default function StockPage({ ctx }) {
   const [page, setPage] = useState(1);
   const [design, setDesign] = useState(null);
   useEffect(() => { setPage(1); }, [search, level, type]);
+  // Opened from the header search: show that design once Stock Room's data is in.
+  useEffect(() => {
+    if (!ctx.stockFocus || !view) return;
+    const r = view.rowsById[ctx.stockFocus];
+    if (r) setDesign(r);
+    ctx.setStockFocus(null);
+  }, [ctx.stockFocus, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stock orders still in production, and what they are making, per design and size.
   const making = useMemo(() => {

@@ -496,3 +496,10 @@
 .ceo.pm .pm-sk.is-card { height: 260px; }
 .ceo.pm .pm-sk.is-card.is-short { height: 180px; }
 @keyframes pmShimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+/* Every data table gets the same soft outer frame as the Orders table
+   (house style for tables: 1px #e6dcc3, 14px corners, header corners rounded). */
+.ceo.pm .ceo-table-wrap { border: 1px solid #e6dcc3; border-radius: 14px; background: #fff; }
+.ceo.pm .ceo-table-wrap .ceo-table th:first-child { border-radius: 13px 0 0 0; }
+.ceo.pm .ceo-table-wrap .ceo-table th:last-child { border-radius: 0 13px 0 0; }
+.ceo.pm .ceo-table-wrap .ceo-table tbody tr:last-child td { border-bottom: 0; }

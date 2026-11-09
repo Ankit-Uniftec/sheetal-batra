@@ -22,6 +22,7 @@ import { fetchReJourneys } from "../../utils/reJourneys";
 import { listHalfMade } from "../../utils/halfMade";
 import { loadLedger, loadSales, loadStockOrders, loadStockRoomCatalogue } from "../StockRoom/stockRoomData";
 import { getStagesOutsideLabel } from "../../utils/barcodeService";
+import { fetchAllRowsParallel } from "../../utils/fetchAllRowsParallel";
 import Logo from "../../images/logo.png";
 import { CalendarIcon, Drawer, GlobalSearch, Icon, MenuIcon, Thumb, num } from "../CeoDashboard/CeoUi";
 import { Stat } from "../CeoDashboard/dashKit";
@@ -30,7 +31,7 @@ import "../GMDashboard/GmMakeover.css";
 import "./PmMakeover.css";
 import {
   channelOf, clientOf, daysLeft, dueDay, groupPieces, isLate, isRunning, isUrgent, loadOrderPieces, loadPmCore, loadQc, loadScans,
-  loadDispatchScans, loadWaiting, pieceName, pieceState, plural,
+  atVendor, isOwnTrip, loadDispatchScans, loadWaiting, pieceName, pieceState, plural,
 } from "./pmModel";
 import { OrdersTable, PiecesTable, orderStatus, piecesLine } from "./PmCommon";
 import { PmCancelModal, PmEditOrderModal, PmPriorityModal } from "./PmModals";
@@ -113,6 +114,12 @@ const LOADERS = {
     return { data: { ...catalogue, stockOrders, recentOrders, ordersReady: true, salesReady: true }, ledger };
   },
   halfMade: () => listHalfMade(),
+  // Design names for the header search (a small list; the full stock data loads on the Stock page).
+  designs: async () => {
+    const res = await fetchAllRowsParallel("products_live", (q) => q.select("id, name, sku_id").order("id"));
+    if (res.error) throw res.error;
+    return (res.data || []).filter((d) => d && d.name);
+  },
 };
 
 export default function PmDashboard() {
@@ -144,6 +151,7 @@ export default function PmDashboard() {
   const [overrideLog, setOverrideLog] = useState(null); // the order whose override history is open
   const [profileOpen, setProfileOpen] = useState(false);
   const [ordersTab, setOrdersTab] = useState(null);  // a tab the Orders page should open on
+  const [stockFocus, setStockFocus] = useState(null); // a design the Stock page should open
   // Old links to Approvals, Overrides or Profile open their panel over Today;
   // an old Cancellations link opens Orders on the Cancelled tab.
   useEffect(() => {
@@ -224,7 +232,7 @@ export default function PmDashboard() {
       });
   }, []);
   // Today needs the requests, the vendor trips and a week of scans.
-  useEffect(() => { if (!loading) { need("waiting"); need("movements"); need("scans8"); need("qc8"); } }, [loading, need]);
+  useEffect(() => { if (!loading) { need("waiting"); need("movements"); need("scans8"); need("qc8"); need("designs"); } }, [loading, need]);
 
   const openRequests = useCallback((view = "overrides") => setRequests({ view }), []);
   /** Re-read what is waiting for a decision (after the Requests panel closes). */
@@ -362,15 +370,82 @@ export default function PmDashboard() {
   const ctx = {
     profile, email: profile?.email || "", orders, ordersById, components, componentsByOrder, piecesById, vendorMap, halfMade,
     lazy, need, syncedAt,
-    openOrder, openOrders, openPieces, go, openJourney, showPopup, navigate, ordersTab, setOrdersTab,
+    openOrder, openOrders, openPieces, go, openJourney, showPopup, navigate, ordersTab, setOrdersTab, stockFocus, setStockFocus,
     openRequests,
     openOverrideLog: (order) => setOverrideLog(order),
     actions: { complete, cancel: setCancelling, edit, priority: setPrioritising, warehousePdf, override: (o) => setOverriding(o), busy },
   };
-  const barcodeSearch = useMemo(() => components.filter((c) => c.barcode).map((c) => ({
-    key: `b${c.id}`, kind: "Piece", label: c.barcode, meta: `${pieceName(c)} · ${c.order_no || ""}`, text: c.barcode,
-    go: () => { const o = ordersById[c.order_id]; if (o) openOrder(o); },
-  })), [components, ordersById, openOrder]);
+  // The header search: everything this dashboard can see. The box itself
+  // matches pages and order or PO numbers; these add, in this order, orders by
+  // Shopify number, clients, products, piece barcodes, stock designs, vendors,
+  // floor staff and salespeople (up to 4 of each). Picking one opens its order,
+  // its list of orders or pieces, or its page, from any screen.
+  const searchIndex = useMemo(() => {
+    const out = [];
+    const group = (keyOf) => {
+      const m = {};
+      orders.forEach((o) => {
+        (keyOf(o) || []).forEach((name) => {
+          const n = String(name || "").trim();
+          if (!n) return;
+          const k = n.toLowerCase();
+          const g = m[k] || (m[k] = { name: n, list: [] });
+          if (!g.list.includes(o)) g.list.push(o);
+        });
+      });
+      return Object.values(m).sort((x, y) => y.list.length - x.list.length);
+    };
+    orders.forEach((o) => {
+      if (!o.shopify_order_name && !o.shopify_order_id) return;
+      out.push({ key: `s${o.id}`, kind: "Order", label: o.order_no, meta: `Shopify ${o.shopify_order_name || o.shopify_order_id}`, text: `${o.shopify_order_name || ""} ${o.shopify_order_id || ""}`, go: () => openOrder(o) });
+    });
+    group((o) => [clientOf(o, vendorMap)]).forEach((g) => out.push({
+      key: `c${g.name}`, kind: "Client", label: g.name, meta: plural(g.list.length, "order"), text: g.name,
+      go: () => openOrders({ title: g.name, sub: "Every order for this client", orders: g.list }),
+    }));
+    group((o) => (o.items || []).map((it) => it.product_name)).forEach((g) => out.push({
+      key: `p${g.name}`, kind: "Product", label: g.name, meta: plural(g.list.length, "order"), text: g.name,
+      go: () => openOrders({ title: g.name, sub: "Every order with this product", orders: g.list }),
+    }));
+    components.forEach((c) => {
+      if (!c.barcode) return;
+      out.push({ key: `b${c.id}`, kind: "Piece", label: c.barcode, meta: `${pieceName(c)} · ${c.order_no || ""}`, text: c.barcode, go: () => { const o = ordersById[c.order_id]; if (o) openOrder(o); } });
+    });
+    (lazy.designs?.rows || []).forEach((d) => out.push({
+      key: `d${d.id}`, kind: "Design", label: d.name, meta: d.sku_id || "Stock", text: `${d.name} ${d.sku_id || ""}`,
+      go: () => { setStockFocus(d.id); go("stock"); },
+    }));
+    const vendors = {};
+    (lazy.movements?.rows || []).forEach((m) => {
+      const n = String(m.vendor_name || "").trim();
+      if (!n || isOwnTrip(m)) return;
+      (vendors[n.toLowerCase()] || (vendors[n.toLowerCase()] = { name: n, trips: 0 })).trips += 1;
+    });
+    Object.values(vendors).forEach((v) => out.push({
+      key: `v${v.name}`, kind: "Vendor", label: v.name, meta: plural(v.trips, "trip"), text: v.name,
+      go: () => {
+        const here = components.filter((c) => atVendor(c) && String(c.vendor_name || "").trim().toLowerCase() === v.name.toLowerCase() && ordersById[c.order_id]);
+        if (here.length) openPieces({ title: `At ${v.name} Now`, sub: "Pieces out with this vendor right now", pieces: here });
+        else go("vendors");
+      },
+    }));
+    const staff = {};
+    (lazy.scans8?.rows || lazy.scans30?.rows || []).forEach((t) => {
+      const n = String(t.scanned_by || "").trim();
+      if (!n) return;
+      const g = staff[n.toLowerCase()] || (staff[n.toLowerCase()] = { name: n, ids: new Set(), scans: 0 });
+      g.scans += 1; if (t.component_id) g.ids.add(t.component_id);
+    });
+    Object.values(staff).forEach((g) => out.push({
+      key: `f${g.name}`, kind: "Floor staff", label: g.name, meta: `${plural(g.scans, "scan")} in 8 days`, text: g.name,
+      go: () => openPieces({ title: `Scanned by ${g.name}`, sub: "Pieces this person scanned in the last 8 days", pieces: [...g.ids].map((id) => piecesById[id]).filter(Boolean) }),
+    }));
+    group((o) => [o.salesperson]).forEach((g) => out.push({
+      key: `sp${g.name}`, kind: "Salesperson", label: g.name, meta: plural(g.list.length, "order"), text: g.name,
+      go: () => openOrders({ title: `Sold by ${g.name}`, sub: "Every order this salesperson placed", orders: g.list }),
+    }));
+    return out;
+  }, [orders, components, vendorMap, ordersById, piecesById, lazy.designs, lazy.movements, lazy.scans8, lazy.scans30, openOrder, openOrders, openPieces, go]);
   const userName = profile?.saleperson || "";
   const waitingCount = lazy.waiting?.rows ? lazy.waiting.rows.requests + lazy.waiting.rows.replacements : 0;
   const initials = (userName || "PM").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
@@ -427,8 +502,8 @@ export default function PmDashboard() {
           <div className="ceo-top">
             <button type="button" className="ceo-icon-btn ceo-menu-btn" aria-label="Open menu" onClick={() => setNavOpen(true)}><MenuIcon /></button>
             <GlobalSearch
-              pages={pages} orders={orders} products={[]} clients={[]} extra={barcodeSearch}
-              placeholder="Search an order, barcode or page"
+              pages={pages} orders={orders} products={[]} clients={[]} extra={searchIndex}
+              placeholder="Search orders, clients, products, barcodes, vendors, people…"
               onPage={go} onOrder={openOrder} onClient={() => {}} onDesign={() => {}}
             />
             <div className="ceo-top-end">
