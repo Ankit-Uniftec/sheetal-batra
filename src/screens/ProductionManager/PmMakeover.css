@@ -414,3 +414,63 @@
 .ceo.pm .pmo-now { min-width: 290px; }
 .ceo.pm .pmo-chip { grid-template-columns: 84px 1fr; min-width: 250px; }
 .ceo.pm .pmo-chip span { white-space: nowrap; }
+
+/* Orders: the photo sits with the product; the order cell is text only. */
+.ceo.pm .pmo-order { min-width: 190px; }
+.ceo.pm .pmo-ordercell { display: flex; flex-direction: column; gap: 3px; }
+.ceo.pm .pmo-productcell { display: flex; gap: 12px; align-items: flex-start; }
+.ceo.pm .pmo-productcell .ceo-thumb { width: 52px; height: 66px; flex-shrink: 0; border-radius: 10px; object-fit: cover; }
+.ceo.pm .pmo-product { min-width: 280px; max-width: 320px; }
+
+/* ---------- Shared tools shown inside this dashboard (overrides, logs, reports) ----------
+   Restyled here only, so the old dashboard and other dashboards keep their look. */
+.ceo.pm .pm-classic .pm-tab-title { display: none; }
+.ceo.pm .pm-classic h2, .ceo.pm .pm-classic h3, .ceo.pm .pm-classic h4 { font-family: var(--ceo-sans) !important; color: #3d3220 !important; }
+.ceo.pm .pm-classic input[type="text"], .ceo.pm .pm-classic input[type="search"], .ceo.pm .pm-classic input[type="date"],
+.ceo.pm .pm-classic input[type="number"], .ceo.pm .pm-classic select {
+  min-height: 40px; border-radius: 10px !important; border: 1px solid #e3dac4 !important; padding: 0 12px; background: #fff; font-size: 13.5px; box-sizing: border-box;
+}
+.ceo.pm .pm-classic textarea { border-radius: 10px !important; border: 1px solid #e3dac4 !important; padding: 10px 12px; font-size: 13.5px; }
+.ceo.pm .pm-classic input:focus, .ceo.pm .pm-classic select:focus, .ceo.pm .pm-classic textarea:focus { outline: none; border-color: #c9a85a !important; box-shadow: 0 0 0 3px rgba(201, 168, 90, .2); }
+
+/* Override tool */
+.ceo.pm .pm-classic .pm-override-search { background: #fbf8f1; border: 1px solid #efe8d8; border-radius: 14px; padding: 16px; box-shadow: none; }
+.ceo.pm .pm-classic .pm-override-input-row button { height: 40px; min-width: 90px; border-radius: 10px; background: #a9821f; color: #fff !important; border: 0; font-weight: 600; }
+.ceo.pm .pm-classic .pm-override-subtitle { font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #8a7a55 !important; margin-bottom: 10px; }
+.ceo.pm .pm-classic .pm-override-comp-card { border: 1px solid #e6dcc3; border-radius: 12px; box-shadow: 0 1px 2px rgba(60, 45, 15, .05); }
+.ceo.pm .pm-classic .pm-override-comp-card.pm-comp-delayed { border-left: 1px solid #e6dcc3; }
+.ceo.pm .pm-classic .pm-override-comp-card.pm-comp-selected { border-color: #b8922e; background: #fffaf0; box-shadow: 0 0 0 1px #b8922e inset; }
+.ceo.pm .pm-classic .pm-override-comp-card:hover { transform: none; border-color: #d6c28f; }
+.ceo.pm .pm-classic .pm-override-detail { border: 1px solid #efe8d8; border-radius: 14px; padding: 20px; }
+.ceo.pm .pm-classic .pm-override-actions-title { font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #8a6510 !important; }
+.ceo.pm .pm-classic .pm-override-type-btn { min-height: 40px; border-radius: 10px; }
+.ceo.pm .pm-classic .pm-override-type-btn.active { background: #a9821f; border-color: #a9821f; color: #fff !important; }
+.ceo.pm .pm-classic .pm-override-submit-btn { min-height: 40px; border-radius: 10px; background: #a9821f; }
+.ceo.pm .pm-classic .pm-override-match { border-radius: 10px; }
+/* Override log: names and emails never wrap letter by letter. */
+.ceo.pm .pm-classic .ovh-table { min-width: 1100px; }
+.ceo.pm .pm-classic .ovh-by { min-width: 190px; word-break: normal; overflow-wrap: anywhere; }
+
+/* Vendor delays and penalties: brand tints, no coloured borders, 40px controls. */
+.ceo.pm .pm-classic .vd-card, .ceo.pm .pm-classic .vd-panel { background: #fff; border: 1px solid #ece4cf; border-radius: 14px; }
+.ceo.pm .pm-classic .vd-card.bad, .ceo.pm .pm-classic .vd-card.warn { border-left: 1px solid #ece4cf; }
+.ceo.pm .pm-classic .vd-card.bad .vd-card-value { color: #a5553a !important; }
+.ceo.pm .pm-classic .vd-card.warn .vd-card-value { color: #8a6510 !important; }
+.ceo.pm .pm-classic .vd-card-title { color: #8a7a55 !important; }
+.ceo.pm .pm-classic .vd-insight.bad { background: #fbf1ec; color: #7a3b27 !important; }
+.ceo.pm .pm-classic .vd-insight.warn { background: #faf3e2; color: #6a4f0c !important; }
+.ceo.pm .pm-classic .vd-view { min-height: 40px; border-radius: 10px; padding: 0 16px; }
+.ceo.pm .pm-classic .vd-title { font-family: var(--ceo-sans) !important; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8a6510 !important; }
+.ceo.pm .pm-classic .vd-worse { outline-color: #c0644a; }
+/* Any other shared card with a thick coloured left edge: keep it plain here. */
+.ceo.pm .pm-classic [class*="card"] { border-left-width: 1px; }
+/* QC history, re-work and vendor trip lists: plain cards with a soft tint for state. */
+.ceo.pm .pm-classic .qch-row, .ceo.pm .pm-classic .rj-row, .ceo.pm .pm-classic .ev-row {
+  border: 1px solid #ece4cf; border-left: 1px solid #ece4cf; border-radius: 12px; background: #fff; padding: 12px 14px;
+}
+.ceo.pm .pm-classic .qch-row-fail, .ceo.pm .pm-classic .rj-row-overdue { background: #fdf6f2; }
+.ceo.pm .pm-classic .qch-row-override, .ceo.pm .pm-classic .rj-row, .ceo.pm .pm-classic .ev-row { background: #fffcf5; }
+.ceo.pm .pm-classic .qch-row-pass, .ceo.pm .pm-classic .ev-row-returned { background: #fafcf8; }
+.ceo.pm .pm-classic .ev-row-configured { background: #fbfaf6; }
+.ceo.pm .pm-classic .cx-presets button, .ceo.pm .pm-classic .cx-presets select { white-space: nowrap; min-height: 36px; }
+.ceo.pm .pm-classic .cx-toolbar { gap: 10px; flex-wrap: wrap; }

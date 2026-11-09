@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
-import formatDate from "../../utils/formatDate";
+import { fmtDate as formatDate } from "./pmModel";
 import { usePopup } from "../../components/Popup";
 import useTabParam from "../../hooks/useTabParam";
 import NotificationBell from "../../components/NotificationBell";

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import formatDate from "../../utils/formatDate";
+import { fmtDate as formatDate } from "./pmModel";
 import { Columns, Drawer, Empty, Icon, Insight, PageHead, Pager, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
 import { ScanReport } from "./PmApprovals";
 import { CsvButton, defineKit } from "../CeoDashboard/dashKit";

@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, 
 import QcHistoryPanel from "../../components/QcHistoryPanel";
 import ReJourneyPanel from "../../components/ReJourneyPanel";
 import { getStageLabel } from "../../utils/barcodeService";
-import formatDate from "../../utils/formatDate";
+import { fmtDate as formatDate } from "./pmModel";
 import { Empty, Insight, PageHead, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
 import { defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";

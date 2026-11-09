@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import formatDate from "../../utils/formatDate";
+import { fmtDate as formatDate } from "./pmModel";
 import { STAGE_GROUPS } from "../../utils/barcodeService";
 import { Icon, num } from "../CeoDashboard/CeoUi";
 import { Card } from "./PmCommon";

@@ -26,18 +26,18 @@ function rangeFor(preset, from, to) {
   return [som, new Date(now.getFullYear(), now.getMonth() + 1, 1)];
 }
 
-function Breakdown({ title, items, total, limit = 8 }) {
+function Breakdown({ title, items, total, limit = 8, hideMoney = false }) {
   const shown = items.slice(0, limit);
   const max = Math.max(1, ...shown.map((x) => x.count));
   return (
     <div className="cx-card">
       <h4>{title}</h4>
       {shown.length === 0 ? <div className="cx-muted">—</div> : shown.map((x) => (
-        <div key={x.key} className="cx-bar-row" title={`${x.count} orders · ${money(x.value)}`}>
+        <div key={x.key} className="cx-bar-row" title={hideMoney ? `${x.count} orders` : `${x.count} orders · ${money(x.value)}`}>
           <span className="cx-bar-label">{x.key}</span>
           <span className="cx-bar"><span style={{ width: `${(x.count / max) * 100}%` }} /></span>
           <span className="cx-bar-num">{x.count}<small> {total ? `${Math.round((x.count / total) * 100)}%` : ""}</small></span>
-          <span className="cx-bar-val">{money(x.value)}</span>
+          {!hideMoney && <span className="cx-bar-val">{money(x.value)}</span>}
         </div>
       ))}
       {items.length > limit && <div className="cx-muted">+{items.length - limit} more in the list below / CSV</div>}
@@ -164,10 +164,10 @@ export default function CancellationsPanel({ hideMoney = false } = {}) {
           </div>
 
           <div className="cx-grid">
-            <Breakdown title="By channel" items={s.byChannel} total={s.count} />
-            <Breakdown title="By reason" items={s.byReason} total={s.count} />
-            <Breakdown title="How far it had got" items={s.byStage} total={s.count} />
-            <Breakdown title="Cancelled by" items={s.byWho} total={s.count} />
+            <Breakdown hideMoney={hideMoney} title="By channel" items={s.byChannel} total={s.count} />
+            <Breakdown hideMoney={hideMoney} title="By reason" items={s.byReason} total={s.count} />
+            <Breakdown hideMoney={hideMoney} title="How far it had got" items={s.byStage} total={s.count} />
+            <Breakdown hideMoney={hideMoney} title="Cancelled by" items={s.byWho} total={s.count} />
           </div>
 
           <div className="cx-card">

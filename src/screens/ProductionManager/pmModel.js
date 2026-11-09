@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabaseClient";
+import baseFormatDate from "../../utils/formatDate";
 import { fetchAllRowsParallel } from "../../utils/fetchAllRowsParallel";
 import { PM_ORDER_SELECT } from "../../utils/pmOrderColumns";
 import {
@@ -24,6 +25,8 @@ import {
 // ============================================================
 
 export const DAY = 86400000;
+/** A date as "09 - 11 - 2026": the app's DD-MM-YYYY with a space either side of each hyphen. */
+export const fmtDate = (v) => { const t = baseFormatDate(v); return typeof t === "string" ? t.replace(/-/g, " - ") : t; };
 const two = (n) => String(n).padStart(2, "0");
 export const dayKey = (d) => `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
 export const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import ExternalVendorsPanel from "../../components/ExternalVendorsPanel";
 import VendorDelaysTab from "../../components/VendorDelays/VendorDelaysTab";
 import VendorRequest from "../../components/VendorRequest";
-import formatDate from "../../utils/formatDate";
+import { fmtDate as formatDate } from "./pmModel";
 import { Empty, Insight, PageHead, Seg, num } from "../CeoDashboard/CeoUi";
 import { defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";

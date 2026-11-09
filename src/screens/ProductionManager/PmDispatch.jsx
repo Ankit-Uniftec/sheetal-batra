@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DispatchReport from "../../components/DispatchReport";
-import formatDate from "../../utils/formatDate";
+import { fmtDate as formatDate } from "./pmModel";
 import { Empty, Insight, PageHead, Pager, Seg, num } from "../CeoDashboard/CeoUi";
 import { defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";

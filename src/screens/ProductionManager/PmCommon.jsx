@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import formatDate from "../../utils/formatDate";
+import { fmtDate as formatDate } from "./pmModel";
 import downloadCsv from "../../utils/downloadCsv";
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import { getOrderProgressStatus, getStagesOutsideLabel } from "../../utils/barcodeService";

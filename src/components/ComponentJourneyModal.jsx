@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ComponentStageBadge from "./ComponentStageBadge";
-import formatDate from "../utils/formatDate";
+import baseFormatDate from "../utils/formatDate";
 import {
   STAGE_GROUPS,
   getStageGroupKey,
@@ -18,6 +18,9 @@ import { MoveToHalfMadeModal, UseHalfMadeModal } from "./HalfMadeModals";
 import { supabase } from "../lib/supabaseClient";
 import { fetchMyRole, isProductionRole } from "../utils/halfMade";
 import "./ComponentJourneyModal.css";
+
+// Dates read "14 - 07 - 2026": a space either side of each hyphen.
+const formatDate = (v) => { const t = baseFormatDate(v); return typeof t === "string" ? t.replace(/-/g, " - ") : t; };
 
 /**
  * ComponentJourneyModal — the full production journey of an order's components.

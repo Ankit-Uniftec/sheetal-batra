@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import formatDate from "../../utils/formatDate";
+import { fmtDate as formatDate } from "./pmModel";
 import { Columns, Empty, Icon, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
 import { Card, DueCell, OrderCell, Table, Tile } from "./PmCommon";
 import { ActionsCard, BriefingCard, useInsights } from "./PmBriefing";
