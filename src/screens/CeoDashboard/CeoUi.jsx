@@ -157,7 +157,7 @@ export function Tile({ label, value, title, delta, inverse, note, icon, onClick,
 
 export function Spark({ data, dataKey = "revenue" }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
       <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
         <Area type="monotone" dataKey={dataKey} stroke="#b8922e" strokeWidth={1.5} fill="#b8922e" fillOpacity={0.12} isAnimationActive={false} />
       </AreaChart>
@@ -191,7 +191,7 @@ export function TrendChart({ data, height = 280, onPick }) {
   if (!data?.length) return <Empty />;
   return (
     <div style={{ width: "100%", height, cursor: onPick ? "pointer" : undefined }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
         <ComposedChart data={data} margin={{ top: 8, right: 6, left: 0, bottom: 0 }} onClick={pickFrom(onPick)}>
           <defs>
             <linearGradient id="ceoRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -218,7 +218,7 @@ export function Donut({ data, center, sub, height = 220, valueKey = "value", mon
   if (!rows.length) return <Empty />;
   return (
     <div className="ceo-donut" style={{ height }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
         <PieChart>
           <Pie data={rows} dataKey={valueKey} nameKey="name" innerRadius="66%" outerRadius="96%" paddingAngle={2} stroke="none" isAnimationActive={false}
             onClick={onPick ? (d) => onPick(d.payload?.payload || d) : undefined} style={onPick ? { cursor: "pointer" } : undefined}>
@@ -268,7 +268,7 @@ export function Columns({ data, valueKey = "value", labelKey = "name", name = "R
   if (!data?.length) return <Empty />;
   return (
     <div style={{ width: "100%", height, cursor: onPick ? "pointer" : undefined }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
         <BarChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} onClick={pickFrom(onPick)}>
           <CartesianGrid stroke="#f1ede2" vertical={false} />
           <XAxis dataKey={labelKey} tick={axis} axisLine={false} tickLine={false} minTickGap={6} />

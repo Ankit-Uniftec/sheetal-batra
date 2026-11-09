@@ -87,43 +87,47 @@ export default function CommsDashboard() {
   const [eventSignal, setEventSignal] = useState(0); // the header's New Event button
   const [stockRoom, setStockRoom] = useState({ data: null, ledger: null, error: null, started: false });
 
-  const loadOrders = useCallback(async () => {
-    // Comms-channel orders only, exactly as before.
-    const { data: rows } = await fetchAllRows("orders", (q) => q.select("*").eq("is_comms", true).order("created_at", { ascending: false }));
-    const list = rows || [];
+  // Everything the dashboard shows, read side by side: orders, their pieces and
+  // the PR records do not depend on each other (pieces are found by the Comms
+  // order number, SB-COM-…), so nothing waits for anything else. Only the
+  // vendor-trip lookup needs the pieces first.
+  const fetchAll = useCallback(async () => {
+    const [ordersRes, compsRes, prRes] = await Promise.all([
+      fetchAllRows("orders", (q) => q.select("*").eq("is_comms", true).order("created_at", { ascending: false })),
+      fetchAllRows("order_components", (q) => q
+        .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count, stage_pass_counts")
+        .like("order_no", "SB-COM-%")
+        .order("id")),
+      supabase.from("comms_pr_performance").select("*"),
+    ]);
+    if (ordersRes.error) throw ordersRes.error;
+    const list = ordersRes.data || [];
+    const ids = new Set(list.map((o) => o.id));
+    const enriched = await enrichComponentsWithMovements((compsRes.data || []).filter((c) => ids.has(c.order_id)));
+    const TYPE_ORDER = { top: 0, bottom: 1, dupatta: 2, extra: 3 };
+    const comps = {};
+    enriched.forEach((c) => { (comps[c.order_id] || (comps[c.order_id] = [])).push(c); });
+    Object.values(comps).forEach((arr) => arr.sort((x, y) => (x.item_index ?? 0) - (y.item_index ?? 0) || (TYPE_ORDER[x.component_type] ?? 9) - (TYPE_ORDER[y.component_type] ?? 9)));
+    const pr = {};
+    (prRes.data || []).forEach((r) => { if (ids.has(r.order_id)) pr[r.order_id] = r; });
+    return { list, comps, pr };
+  }, []);
+  const apply = useCallback(({ list, comps, pr }) => {
     setOrders(list);
-    // Each order's pieces, for the production chips, Edit / Cancel rules and View Journey.
-    if (list.length) {
-      const ids = list.map((o) => o.id);
-      let comps = [];
-      for (let i = 0; i < ids.length; i += 100) {
-        const { data, error } = await supabase
-          .from("order_components")
-          .select("id, order_id, order_no, barcode, component_type, component_label, current_stage, previous_stage, item_index, is_outside_wh, stage_updated_at, disposition, disposition_reason, re_journey_count, stage_pass_counts")
-          .in("order_id", ids.slice(i, i + 100));
-        if (error) { console.error("Comms component fetch failed:", error); break; }
-        comps = comps.concat(data || []);
-      }
-      const enriched = await enrichComponentsWithMovements(comps);
-      const TYPE_ORDER = { top: 0, bottom: 1, dupatta: 2, extra: 3 };
-      const map = {};
-      enriched.forEach((c) => { (map[c.order_id] || (map[c.order_id] = [])).push(c); });
-      Object.values(map).forEach((arr) => arr.sort((a, b) => (a.item_index ?? 0) - (b.item_index ?? 0) || (TYPE_ORDER[a.component_type] ?? 9) - (TYPE_ORDER[b.component_type] ?? 9)));
-      setComponentsByOrder(map);
-      // PR records for the overview and PR page.
-      const { data: pr } = await supabase.from("comms_pr_performance").select("*").in("order_id", ids);
-      const prMap = {};
-      (pr || []).forEach((r) => { prMap[r.order_id] = r; });
-      setPrRecords(prMap);
-    }
+    setComponentsByOrder(comps);
+    setPrRecords(pr);
     setSyncedAt(new Date());
   }, []);
+  const loadOrders = useCallback(async () => apply(await fetchAll()), [fetchAll, apply]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate("/login", { replace: true }); return; }
+      // The role check and the data reads start together; nothing is shown
+      // until the role check passes.
+      const data = fetchAll().catch((err) => ({ error: err }));
       const { data: sp } = await supabase
         .from("salesperson")
         .select("email, role, saleperson, phone, designation, store_name")
@@ -136,11 +140,16 @@ export default function CommsDashboard() {
         return;
       }
       setProfile(sp);
-      await loadOrders();
-      if (!cancelled) setLoading(false);
+      const loaded = await data;
+      if (cancelled) return;
+      if (loaded.error) {
+        console.error("Comms data failed:", loaded.error);
+        showPopup({ title: "Data Not Loaded", message: "The Comms orders could not be loaded. Please refresh the page.", type: "error", confirmText: "Ok" });
+      } else apply(loaded);
+      setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [navigate, loadOrders]);
+  }, [navigate, fetchAll, apply]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stock Room's catalogue, locations and 90 days of sales: loaded the first time
   // Inventory opens, the same reads Stock Room makes, so stock always matches it.

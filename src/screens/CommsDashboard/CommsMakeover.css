@@ -47,16 +47,23 @@
   .ceo.comms .comms-cal-seg { margin-left: 0; width: 100%; }
 }
 
-/* Needs Your Attention: one line per thing to act on. */
-.ceo.comms .comms-attention { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
-.ceo.comms .comms-attn { display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; background: #fff; border: 1px solid var(--ceo-line); border-left: 3px solid var(--ceo-gold); border-radius: 10px; cursor: pointer; transition: border-color .15s, background .15s; }
-.ceo.comms .comms-attn:hover { background: #fffdf6; }
-.ceo.comms .comms-attn.is-crit { border-left-color: #c0563f; }
-.ceo.comms .comms-attn.is-warn { border-left-color: #d79a3a; }
-.ceo.comms .comms-attn b { font-size: 1.35rem; font-weight: 500; min-width: 34px; color: var(--ceo-ink) !important; }
-.ceo.comms .comms-attn.is-crit b { color: #a5432f !important; }
-.ceo.comms .comms-attn span { flex: 1; font-size: 13.5px; line-height: 1.35; }
-.ceo.comms .comms-attn svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--ceo-ink-3) !important; }
+/* Needs Your Attention: clean rows. The number leads; a small muted tag says
+   how urgent it is. No coloured borders. */
+.ceo.comms .comms-attention { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+.ceo.comms .comms-attn { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto 16px; align-items: center; gap: 14px; padding: 14px 4px; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--ceo-line); cursor: pointer; transition: background .15s; }
+.ceo.comms .comms-attn:hover { background: #fffbf1; }
+.ceo.comms .comms-attn-num { font-family: var(--ceo-sans) !important; font-size: 1.6rem; line-height: 1; font-weight: 500; color: var(--ceo-gold-deep) !important; text-align: right; font-variant-numeric: tabular-nums; }
+.ceo.comms .comms-attn-text { font-size: 13.5px; line-height: 1.4; color: var(--ceo-ink) !important; }
+.ceo.comms .comms-attn-tag { font-style: normal; font-size: 11px; letter-spacing: .03em; padding: 2px 8px; border-radius: 99px; white-space: nowrap; background: #f4f0e6; color: var(--ceo-ink-3) !important; }
+.ceo.comms .comms-attn-tag.is-crit { background: #f7ebe7; color: #9a4a35 !important; }
+.ceo.comms .comms-attn-tag.is-warn { background: #f6efe2; color: #8a6a24 !important; }
+.ceo.comms .comms-attn svg { width: 14px; height: 14px; color: var(--ceo-ink-3) !important; }
+@media (max-width: 900px) {
+  .ceo.comms .comms-attention { grid-template-columns: 1fr; }
+  .ceo.comms .comms-attn { grid-template-columns: 52px minmax(0, 1fr) auto 14px; gap: 10px; }
+  .ceo.comms .comms-attn-num { font-size: 1.5rem; }
+}
+@media (max-width: 480px) { .ceo.comms .comms-attn-tag { display: none; } }
 
 /* Monthly trend legend */
 .ceo.comms .comms-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12.5px; }

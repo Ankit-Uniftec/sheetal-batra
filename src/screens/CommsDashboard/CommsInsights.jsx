@@ -64,6 +64,7 @@ function repeatDesigns(orders) {
 }
 
 // ------------------------------------------------------------ NEEDS YOUR ATTENTION
+const TAG = { crit: "Act now", warn: "Follow up", gold: "Today" };
 export function AttentionCard({ ctx }) {
   const { orders, prRecords, openOrders, go } = ctx;
   const [blocks, setBlocks] = useState([]);
@@ -102,8 +103,11 @@ export function AttentionCard({ ctx }) {
       {!shown.length ? <Empty text="Nothing needs your attention right now." /> : (
         <div className="comms-attention">
           {shown.map((i) => (
-            <button key={i.key} type="button" className={`comms-attn is-${i.tone}`} onClick={i.open}>
-              <b>{num(i.count)}</b><span>{i.label}</span><Icon name="chevron" />
+            <button key={i.key} type="button" className="comms-attn" onClick={i.open}>
+              <b className="comms-attn-num">{num(i.count)}</b>
+              <span className="comms-attn-text">{i.label}</span>
+              <i className={`comms-attn-tag is-${i.tone}`}>{TAG[i.tone]}</i>
+              <Icon name="chevron" />
             </button>
           ))}
         </div>
@@ -155,7 +159,7 @@ export function TrendCard({ ctx }) {
     <Card span={7} title="Monthly Trend" sub="Comms orders placed each month, by engagement. Click a month to see its orders.">
       {!months.length ? <Empty /> : (
         <div style={{ width: "100%", height: 260, cursor: "pointer" }}>
-          <ResponsiveContainer>
+          <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
             <BarChart data={months} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#f1ede2" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} />
