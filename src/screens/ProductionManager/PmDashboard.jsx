@@ -324,13 +324,13 @@ export default function PmDashboard() {
   const piecesById = useMemo(() => Object.fromEntries(components.map((c) => [c.id, c])), [components]);
 
   // ------------------------------------------------------------ actions
-  const openJourney = (order) => {
+  const openJourney = (order, componentId = null) => {
     const comps = componentsByOrder[order.id] || [];
     if (!comps.length) {
       showPopup({ title: "No Pieces Yet", message: `${order.order_no} has no barcoded pieces yet, so there is no journey to show.`, type: "info", confirmText: "Ok" });
       return;
     }
-    setJourney({ orderNo: order.order_no, components: comps, orderId: order.id });
+    setJourney({ orderNo: order.order_no, components: comps, orderId: order.id, componentId });
   };
 
   const warehousePdf = async (order) => {
@@ -655,7 +655,7 @@ export default function PmDashboard() {
       </div>
 
       {journey && createPortal(
-        <ComponentJourneyModal orderNo={journey.orderNo} components={journey.components} onClose={() => { const id = journey.orderId; setJourney(null); reloadOrder(id); }} />,
+        <ComponentJourneyModal orderNo={journey.orderNo} components={journey.components} initialComponentId={journey.componentId} onClose={() => { const id = journey.orderId; setJourney(null); reloadOrder(id); }} />,
         document.body,
       )}
       {picker && (
@@ -771,23 +771,6 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
 
       <div className="pm-od-grid">
       <div className="pm-od-col">
-      <p className="pm-dsection">Pieces</p>
-      <div className="pm-pieces">
-        {!comps.length && <p className="ceo-muted">No barcoded pieces yet.</p>}
-        {comps.map((c) => (
-          <div key={c.id} className={`pm-piece is-${pieceState(c)}`}>
-            <span className="pm-piece-main">
-              <b>{pieceName(c)}</b>
-              <small className="pm-code">{c.barcode}</small>
-            </span>
-            <span className="pm-piece-side">
-              <span className="ceo-keep"><ComponentStageBadge comp={c} look="brand" /></span>
-              {c.is_outside_wh && <small>At {c.vendor_name || "vendor"}{c.stages_outside ? ` · ${getStagesOutsideLabel(c.stages_outside) || ""}` : ""}</small>}
-            </span>
-          </div>
-        ))}
-      </div>
-
       <p className="pm-dsection">Order Details</p>
 
       <dl className="ceo-dl">
@@ -802,11 +785,8 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
         {o.notes && <><dt>Production Notes</dt><dd>{o.notes}</dd></>}
         {o.cancellation_reason && <><dt>Cancellation Reason</dt><dd>{o.cancellation_reason}</dd></>}
         <dt>Pieces</dt><dd>{piecesLine(comps)}</dd>
-        <dt>Pieces in total</dt><dd>{num(live.length)}</dd>
       </dl>
-      </div>
 
-      <div className="pm-od-col">
       <p className="pm-dsection">Products</p>
       <div className="pm-products">
         {photo && <PhotoView photo={photo} onClose={() => setPhoto(null)} />}
@@ -822,7 +802,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
                 <small>{[it.size && `Size ${it.size}`, `Qty ${Number(it.quantity) || 1}`].filter(Boolean).join(" · ")}</small>
                 {it.notes && <small>Note: {it.notes}</small>}
                 {mine.length
-                  ? <div className="pmc-plist">{mine.map((c) => <PieceRow key={c.id} c={c} item={it} hexOf={hexOf} />)}</div>
+                  ? <div className="pmc-plist">{mine.map((c) => <PieceRow key={c.id} c={c} item={it} hexOf={hexOf} showStatus={false} />)}</div>
                   : <small className="pm-muted">No pieces yet</small>}
               </div>
             </div>
@@ -830,6 +810,24 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
         })}
       </div>
       </div>
+
+      <aside className="pm-od-side">
+        <p className="pm-dsection">Pieces</p>
+        <small className="pm-od-hint">Click a piece to open its journey.</small>
+        <div className="pm-pieces">
+          {!comps.length && <p className="ceo-muted">No barcoded pieces yet.</p>}
+          {comps.map((c) => (
+            <button key={c.id} type="button" className={`pm-piece is-${pieceState(c)}`} onClick={() => ctx.openJourney(o, c.id)}>
+              <span className="pm-piece-main">
+                <b>{pieceName(c)}</b>
+                <small className="pm-code">{c.barcode}</small>
+              </span>
+              <span className="ceo-keep"><ComponentStageBadge comp={c} look="brand" /></span>
+              {c.is_outside_wh && <small className="pm-piece-vendor">At {c.vendor_name || "vendor"}{c.stages_outside ? ` · ${getStagesOutsideLabel(c.stages_outside) || ""}` : ""}</small>}
+            </button>
+          ))}
+        </div>
+      </aside>
       </div>
     </Drawer>
   );

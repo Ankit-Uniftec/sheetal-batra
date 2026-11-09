@@ -858,3 +858,36 @@
   .ceo.pm .pmc-kv { flex-wrap: wrap; }
   .ceo.pm .pmc-piece .pmo-colour { max-width: 100%; }
 }
+
+/* Order panel: order details, then products; the pieces in a sidebar (click one for its journey). */
+.ceo.pm .pm-od-grid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 22px; align-items: start; }
+.ceo.pm .pm-od-side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid #ece5d2; border-radius: 14px; background: #fcfaf4; }
+.ceo.pm .pm-od-side .pm-dsection { margin-top: 0; }
+.ceo.pm .pm-od-hint { font-size: 11.5px; color: #8c8476 !important; margin-top: -4px; }
+.ceo.pm .pm-od-side .pm-pieces { display: flex; flex-direction: column; gap: 8px; }
+.ceo.pm .pm-od-side .pm-piece {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; text-align: left; padding: 10px 12px;
+  border: 1px solid #ece5d2; border-radius: 12px; background: #fff; cursor: pointer; font: inherit; transition: border-color .15s, box-shadow .15s;
+}
+.ceo.pm .pm-od-side .pm-piece:hover { border-color: #c9a23e; box-shadow: 0 6px 14px -10px rgba(70, 52, 12, .45); }
+.ceo.pm .pm-od-side .pm-piece-main { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; width: 100%; }
+.ceo.pm .pm-od-side .pm-piece-main b { font-size: 13px; font-weight: 600; }
+.ceo.pm .pm-piece-vendor { font-size: 11.5px; color: #8f5a2e !important; }
+@media (max-width: 900px) {
+  .ceo.pm .pm-od-grid { grid-template-columns: minmax(0, 1fr); }
+  .ceo.pm .pm-od-side { position: static; order: -1; }
+}
+
+/* Piece cards: name and status on one line, measurements under their label, wider cards. */
+.ceo.pm .pmc-piece-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ceo.pm .pmc-piece-top .pmc-pstatus { flex-shrink: 0; max-width: 60%; text-align: right; line-height: 1.35; }
+.ceo.pm .pmc-mblock { display: flex; flex-direction: column; gap: 5px; }
+.ceo.pm .pmc-pmain .pmc-plist { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.ceo.pm .pm-product .pmc-plist { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+@media (max-width: 760px) { .ceo.pm .pmc-pmain .pmc-plist { grid-template-columns: minmax(0, 1fr); } }
+.ceo.pm .pm-product .pm-product-body { min-width: 0; flex: 1; }
+@media (max-width: 760px) {
+  .ceo.pm .pm-product { flex-wrap: wrap; }
+  .ceo.pm .pm-product .pm-product-body { flex-basis: 100%; }
+  .ceo.pm .pm-product .pmc-plist { grid-template-columns: minmax(0, 1fr); }
+}

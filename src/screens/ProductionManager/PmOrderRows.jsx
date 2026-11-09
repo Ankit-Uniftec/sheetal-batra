@@ -138,17 +138,19 @@ export function garmentOf(c, item = {}) {
 const whereOf = (c, st) => (st === "at_vendor" ? `At ${c.vendor_name || "vendor"}` : st === "at_wh2" ? `${stageName(c)} · Delhi (2)` : st === "not_started" ? "Not started"
   : st === "finished" ? "Finished" : st === "disposed" ? "Disposed" : st === "removed" ? "Cancelled" : stageName(c));
 /** A piece: the garment and its colour, where it is now, and its measurements. */
-export function PieceRow({ c, item, hexOf }) {
+export function PieceRow({ c, item, hexOf, showStatus = true }) {
   const st = pieceState(c);
   const g = garmentOf(c, item);
   const m = measuresFor(c, item);
   return (
     <div className={`pmc-piece is-${st}`} title={c.barcode}>
-      <b className="pmc-piece-name">{g.name}</b>
+      <div className="pmc-piece-top">
+        <b className="pmc-piece-name">{g.name}</b>
+        {showStatus && <span className={`pmc-pstatus is-${st}`} title="Where the piece is now">{whereOf(c, st)}</span>}
+      </div>
       {g.colour ? <span className="pmc-kv"><span className="pmc-k">Colour</span><Colour value={g.colour} hexOf={hexOf || {}} /></span> : null}
-      <span className="pmc-kv"><span className="pmc-k">Status</span><span className={`pmc-pstatus is-${st}`}>{whereOf(c, st)}</span></span>
       {m && (
-        <span className="pmc-kv is-top"><span className="pmc-k">Measurements</span><span className="pmc-mchips">
+        <span className="pmc-mblock"><span className="pmc-k">Measurements (in)</span><span className="pmc-mchips">
           {Object.entries(m).filter(([, v]) => v !== "" && v != null).map(([k, v]) => <i key={k}><small>{k}</small>{v}</i>)}
         </span></span>
       )}
