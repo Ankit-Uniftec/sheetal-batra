@@ -46,3 +46,31 @@
   .ceo.comms .comms-cal-marks i.is-event { background: #2f6f73; }
   .ceo.comms .comms-cal-seg { margin-left: 0; width: 100%; }
 }
+
+/* Needs Your Attention: one line per thing to act on. */
+.ceo.comms .comms-attention { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.ceo.comms .comms-attn { display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; background: #fff; border: 1px solid var(--ceo-line); border-left: 3px solid var(--ceo-gold); border-radius: 10px; cursor: pointer; transition: border-color .15s, background .15s; }
+.ceo.comms .comms-attn:hover { background: #fffdf6; }
+.ceo.comms .comms-attn.is-crit { border-left-color: #c0563f; }
+.ceo.comms .comms-attn.is-warn { border-left-color: #d79a3a; }
+.ceo.comms .comms-attn b { font-size: 1.35rem; font-weight: 500; min-width: 34px; color: var(--ceo-ink) !important; }
+.ceo.comms .comms-attn.is-crit b { color: #a5432f !important; }
+.ceo.comms .comms-attn span { flex: 1; font-size: 13.5px; line-height: 1.35; }
+.ceo.comms .comms-attn svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--ceo-ink-3) !important; }
+
+/* Monthly trend legend */
+.ceo.comms .comms-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12.5px; }
+.ceo.comms .comms-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+
+/* A warning line in a side panel (for example, the same design sent twice). */
+.ceo.comms .comms-flag { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; margin: 4px 0 14px; background: #fbf1e3; border: 1px solid #ecd2a8; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.ceo.comms .comms-flag svg { width: 16px; height: 16px; flex-shrink: 0; color: #b0702a !important; margin-top: 1px; }
+
+/* Data gaps: how much of each detail is missing. */
+.ceo.comms .comms-gaps { display: flex; flex-direction: column; gap: 10px; }
+.ceo.comms .comms-gap { display: flex; flex-direction: column; gap: 5px; padding: 0; text-align: left; background: none; border: 0; cursor: pointer; }
+.ceo.comms .comms-gap-bar { display: block; height: 6px; border-radius: 6px; background: #f3eee2; overflow: hidden; }
+.ceo.comms .comms-gap-bar i { display: block; height: 100%; background: #d79a3a; border-radius: 6px; }
+.ceo.comms .comms-gap-text { font-size: 13px; line-height: 1.4; }
+.ceo.comms .comms-gap-text b { font-weight: 600; }
+.ceo.comms .comms-gap:hover .comms-gap-text { color: var(--ceo-gold-deep) !important; }

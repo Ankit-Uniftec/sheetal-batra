@@ -28,6 +28,7 @@ import {
   CalendarPage, CommsOrdersList, InventoryPage, OrdersPage, OverviewPage, PrPage, ReportsPage, SourcingPage, VendorsPage,
   canCancelOrder, canEditOrder, engagementTone, notionalOf, statusOf, windowExpiredMessage,
 } from "./CommsPages";
+import { RecipientDrawer } from "./CommsInsights";
 
 // ============================================================
 // Comms dashboard (Nazreen). The same pages as before, redrawn with the
@@ -175,6 +176,7 @@ export default function CommsDashboard() {
   const open = (layer) => setStack((s) => [...s, layer]);
   const openOrder = (order) => open({ type: "order", id: order.id });
   const openOrders = ({ title, sub, orders: list }) => open({ type: "orders", title, sub, ids: list.map((o) => o.id) });
+  const openRecipient = (name) => open({ type: "recipient", name });
   const go = (id) => { setActiveTab(id); setNavOpen(false); setStack([]); };
 
   const makePdf = async (order, type) => {
@@ -206,7 +208,7 @@ export default function CommsDashboard() {
   const ctx = {
     orders, ordersById, componentsByOrder, prRecords, setPrRecords, profile, stockRoom,
     inPeriod, range, periodName,
-    openOrder, openOrders, openJourney, makePdf, pdfBusy, replaceOrder, showPopup, navigate, eventSignal,
+    openOrder, openOrders, openRecipient, go, notionalOf, statusOf, openJourney, makePdf, pdfBusy, replaceOrder, showPopup, navigate, eventSignal,
     newOrder: () => navigate("/comms-order-form"),
   };
   const userName = profile?.saleperson || "";
@@ -320,6 +322,9 @@ export default function CommsDashboard() {
             <CommsOrdersList ctx={ctx} title={top.title} orders={top.ids.map((id) => ordersById[id]).filter(Boolean)} />
           </Drawer>
         )}
+        {top && top.type === "recipient" && (
+          <RecipientDrawer ctx={ctx} name={top.name} onClose={() => setStack([])} onBack={stack.length > 1 ? () => setStack((s) => s.slice(0, -1)) : undefined} />
+        )}
         {top && top.type === "order" && ordersById[top.id] && (
           <CommsOrderDrawer
             order={ordersById[top.id]}
@@ -406,7 +411,7 @@ function CommsOrderDrawer({ order: o, ctx, onEdit, onCancel, onClose, onBack }) 
       )}
       <dl className="ceo-dl">
         <dt>Engagement</dt><dd><i className={`ceo-pill comms-eng is-${tone}`}>{o.comms_engagement_type || "–"}</i></dd>
-        <dt>Recipient</dt><dd>{o.delivery_name || "–"}</dd>
+        <dt>Recipient</dt><dd>{o.delivery_name ? <button type="button" className="ceo-inline" onClick={() => ctx.openRecipient(o.delivery_name)}>{o.delivery_name}</button> : "–"}</dd>
         {o.comms_purpose && <><dt>Purpose</dt><dd>{o.comms_purpose}</dd></>}
         {o.comms_agency_name && <><dt>Agency</dt><dd>{o.comms_agency_name}</dd></>}
         {o.comms_poc_name && <><dt>Point of Contact</dt><dd>{o.comms_poc_name}</dd></>}

@@ -40,6 +40,13 @@ export const TILE_INFO = {
 
 /** Card and chart titles. */
 export const CARD_INFO = {
+  "Needs Your Attention": "Things to act on now: late returns, late deliveries, missing PR records, repeat designs to the same person, today's deliveries and events, and blocks to release.",
+  "Monthly Trend": "Comms orders placed each month over the last year, split by engagement type. Cancelled and rejected orders are not counted.",
+  "By Occasion": "What the outfits were for, from the purpose on each order. Spellings that differ only in capitals or spaces are counted together.",
+  "By Agency": "Which agencies the orders came through, from the agency on each order.",
+  "By Request Source": "Whether each request came through an agency or from an individual directly.",
+  "Return Condition": "How sourcing outfits came back when they were marked returned.",
+  "Data Gaps": "Details left blank on Comms orders. Filling them in keeps reports and insights complete.",
   "Orders by Engagement": "How the period's Comms orders split across barter, gifting, sourcing and personal orders.",
   "Top Recipients": "The people and agencies who received the most Comms orders in the period.",
   "Top Designs": "The designs sent out most often through Comms in the period.",

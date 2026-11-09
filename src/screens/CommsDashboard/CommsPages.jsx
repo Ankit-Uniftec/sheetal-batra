@@ -18,6 +18,7 @@ import { PrEditModal } from "./CommsPRPerformance";
 import { useCommsReports } from "./CommsReports";
 import { EVENT_TYPES, EventModal, deleteCommsEvent, eventTypeMeta, loadCommsEvents } from "./CommsCalendar";
 import { supabase } from "../../lib/supabaseClient";
+import { AttentionCard, DataGapsCard, MixCards, RecipientsCard, TrendCard } from "./CommsInsights";
 
 // ============================================================
 // Nazreen's (Comms) pages. Every figure and action from the old dashboard is
@@ -120,7 +121,7 @@ export function CommsOrdersList({ ctx, orders, title }) {
 
 // ------------------------------------------------------------ OVERVIEW
 export function OverviewPage({ ctx }) {
-  const { orders, componentsByOrder, prRecords, inPeriod, periodName, openOrders, openOrder, newOrder } = ctx;
+  const { orders, componentsByOrder, prRecords, inPeriod, periodName, openOrders, openOrder } = ctx;
   const data = useMemo(() => {
     const placed = orders.filter((o) => inPeriod(o.created_at) && isLive(o));
     const byEng = ENGAGEMENTS.map((t) => {
@@ -171,7 +172,6 @@ export function OverviewPage({ ctx }) {
       <PageHead title="Overview" desc="Comms orders at a glance. Click any figure to see the orders behind it.">
         <span className="ceo-muted">{periodName}</span>
         <CsvButton label="Export Orders" disabled={!data.placed.length} onClick={() => exportCommsOrders(`orders ${periodName}`, data.placed, ctx)} />
-        <button type="button" className="ceo-btn is-primary" onClick={newOrder}><Icon name="plus" />New Comms Order</button>
       </PageHead>
       <div className="ceo-tiles">
         <Tile icon="orders" label="Comms Orders" value={num(data.placed.length)} note={periodName} onClick={() => openOrders({ title: "Comms Orders", sub: periodName, orders: data.placed })} />
@@ -181,13 +181,14 @@ export function OverviewPage({ ctx }) {
         <Tile icon="trend" label="PR Captured" value={`${capturedPct.toFixed(0)}%`} note={`${num(data.captured.length)} of ${num(data.prEligible.length)} orders`} onClick={() => openOrders({ title: "PR Not Captured", sub: "Barter, gifting and sourcing orders without a PR record", orders: data.prEligible.filter((o) => !ctx.prRecords[o.id]) })} />
       </div>
       <div className="ceo-grid">
+        <AttentionCard ctx={ctx} />
+        <TrendCard ctx={ctx} />
         <Card span={5} title="Orders by Engagement" sub="Click a type to see its orders">
           <Donut data={data.byEng} money={false} center={num(data.placed.length)} sub="orders" onPick={(d) => { const g = data.byEng.find((x) => x.name === d.name); if (g) openOrders({ title: g.name, sub: periodName, orders: g.list }); }} />
           <RankBars rows={data.byEng} format={(v) => ordersN(v)} colorOf={(r) => ENGAGEMENT_COLOURS[r.name]} sub={(r) => `${shortInr(r.notional)} notional`} onRow={(r) => openOrders({ title: r.name, sub: periodName, orders: r.list })} />
         </Card>
-        <Card span={7} title="Top Recipients" sub="Click a name to see their orders">
-          <RankBars rows={data.recipients} limit={10} format={(v) => ordersN(v)} sub={(r) => `${shortInr(r.notional)} notional`} onRow={(r) => openOrders({ title: r.name, sub: periodName, orders: r.list })} />
-        </Card>
+        <RecipientsCard ctx={ctx} placed={data.placed} />
+        <MixCards ctx={ctx} placed={data.placed} />
         <Card span={6} title="Deliveries Due This Week" sub="Click an order to open it">
           <Table rowKey={(r) => r.id} rows={data.dueWeek} onRow={openOrder} empty="Nothing due in the next 7 days." columns={[
             { key: "order", label: "Order", render: (o) => <OrderCell o={o} /> },
@@ -201,10 +202,11 @@ export function OverviewPage({ ctx }) {
             { key: "due", label: "Return Date", right: true, render: (o) => formatDate(o.comms_outfit_return_date) },
           ]} />
         </Card>
-        <Card span={6} title="Top Designs" sub="Click a design to see its orders">
+        <Card span={7} title="Top Designs" sub="Click a design to see its orders">
           <RankBars rows={data.designs} limit={8} format={(v) => `${num(v)} ${v === 1 ? "piece" : "pieces"}`} onRow={(r) => openOrders({ title: r.name, sub: `Comms orders with this design, ${periodName}`, orders: r.list })} />
         </Card>
-        <Card span={6} title="Recent Orders" sub="Click an order to open it">
+        <DataGapsCard ctx={ctx} />
+        <Card span={12} title="Recent Orders" sub="Click an order to open it">
           <Table rowKey={(r) => r.id} rows={data.placed.slice(0, 8)} onRow={openOrder} empty="No Comms orders in this period." columns={[
             { key: "order", label: "Order", render: (o) => <OrderCell o={o} /> },
             { key: "eng", label: "Engagement", hide: true, render: (o) => <EngagementPill type={o.comms_engagement_type} /> },
@@ -236,7 +238,7 @@ const inStatusTab = (o, tab) => {
 };
 
 export function OrdersPage({ ctx }) {
-  const { orders, componentsByOrder, openOrder, newOrder } = ctx;
+  const { orders, componentsByOrder, openOrder } = ctx;
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("all");
   const [eng, setEng] = useState("");
@@ -260,9 +262,7 @@ export function OrdersPage({ ctx }) {
 
   return (
     <div className="ceo-page">
-      <PageHead title="Orders" desc="Every Comms order. Click an order to see its pieces, follow its production, open its PDFs, or edit or cancel it within 48 hours.">
-        <button type="button" className="ceo-btn is-primary" onClick={newOrder}><Icon name="plus" />New Comms Order</button>
-      </PageHead>
+      <PageHead title="Orders" desc="Every Comms order. Click an order to see its pieces, follow its production, open its PDFs, or edit or cancel it within 48 hours." />
       <Card>
         <ListTools search={search} onSearch={setSearch} placeholder="Search order, recipient, agency or contact" filters={active} onFilters={() => setDrawer(true)} exportDisabled={!list.length} onExport={() => exportCommsOrders("orders", list, ctx)}>
           <Seg label="Status" value={tab} onChange={setTab} options={STATUS_TABS.map((t) => ({ ...t, count: counts[t.value] }))} />
@@ -496,9 +496,7 @@ export function CalendarPage({ ctx }) {
 
   return (
     <div className="ceo-page">
-      <PageHead title="Calendar" desc="Comms deliveries and your own follow-ups, events and shoots, on one calendar. Click a day to see what is on it.">
-        <button type="button" className="ceo-btn is-primary" onClick={() => setModal({ mode: "create" })}><Icon name="plus" />New Event</button>
-      </PageHead>
+      <PageHead title="Calendar" desc="Comms deliveries and your own follow-ups, events and shoots, on one calendar. Click a day to see what is on it. Add an event with New Event at the top." />
       <div className="ceo-tiles">
         <Tile icon="orders" label="Deliveries" value={num(monthDeliveries.length)} note={month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })} onClick={() => ctx.openOrders({ title: "Deliveries", sub: month.toLocaleDateString("en-IN", { month: "long", year: "numeric" }), orders: monthDeliveries })} />
         <Tile icon="pin" label="My Events" value={num(monthEvents.length)} note={month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })} onClick={() => setEventsOpen(true)} />
