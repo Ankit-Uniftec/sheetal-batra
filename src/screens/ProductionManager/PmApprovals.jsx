@@ -4,27 +4,28 @@ import "../../components/ProductionOverrides.css";
 import OverrideHistory from "../../components/OverrideHistory";
 import ReplacementApprovals from "../../components/ReplacementApprovals";
 import { fetchScanReport, scanReportCsv } from "../../utils/scanReport";
-import { Chips, DateRange, Icon, Insight, PageHead, Seg, num } from "../CeoDashboard/CeoUi";
+import { Chips, DateRange, Icon, Insight, Seg, num } from "../CeoDashboard/CeoUi";
 import { listRecentDecisions } from "../../utils/stageRequests";
 import { Card } from "./PmCommon";
 import { DAY, dayKey, plural, todayStart } from "./pmModel";
 
 // ============================================================
-// Approvals: everything that waits for the Production Manager's decision or
-// hand. The panels are the same ones the old dashboard used, so every
-// approval, override and rejection is saved exactly as before.
+// Requests & Overrides: everything that waits for the Production Manager's
+// decision, in one side panel opened from the menu or the header. The panels
+// are the same ones the old dashboard used, so every approval, override and
+// rejection is saved exactly as before. Overrides for one order open from that
+// order's own actions instead.
 // ============================================================
 
 const VIEWS = [
-  { value: "overrides", label: "Scan & Overrides" },
+  { value: "overrides", label: "Requests & Overrides" },
   { value: "replacements", label: "Replacements" },
   { value: "log", label: "Override Log" },
-  { value: "report", label: "Scan Report" },
 ];
 
-export default function ApprovalsPage({ ctx }) {
+export default function RequestsPanel({ ctx, initialView = "overrides" }) {
   const { lazy, need } = ctx;
-  const [view, setView] = useState("overrides");
+  const [view, setView] = useState(initialView);
   useEffect(() => { need("waiting"); need("scans8"); }, [need]);
   const w = lazy.waiting?.rows;
   const scans = lazy.scans8?.rows;
@@ -65,9 +66,8 @@ export default function ApprovalsPage({ ctx }) {
     return out;
   }, [w, decided, scans]);
   return (
-    <div className="ceo-page">
-      <PageHead title="Approvals" desc="Stage change requests, overrides, replacements and the record of every override." />
-      <div className="ceo-tiles">
+    <>
+      <div className="ceo-tiles pm-panel-tiles">
         <button type="button" className="ceo-tile is-link" onClick={() => setView("overrides")}>
           <span className={`ceo-tile-ico${w?.requests ? " is-warn" : ""}`}><Icon name="edit" /></span>
           <span className="ceo-tile-body"><span className="ceo-tile-label">Stage Requests Waiting</span><span className="ceo-tile-value">{w ? num(w.requests) : "…"}</span><span className="ceo-tile-foot"><span className="ceo-tile-note">From the floor</span></span></span>
@@ -88,16 +88,15 @@ export default function ApprovalsPage({ ctx }) {
         {view === "overrides" && <ProductionOverrides currentUserEmail={ctx.email} />}
         {view === "replacements" && <ReplacementApprovals currentUserEmail={ctx.email} hideMoney />}
         {view === "log" && <OverrideHistory />}
-        {view === "report" && <ScanReport ctx={ctx} />}
       </section>
-    </div>
+    </>
   );
 }
 
 const QUICK = [{ value: "1", label: "Today" }, { value: "7", label: "Last 7 Days" }, { value: "30", label: "Last 30 Days" }];
 
 /** Every scan in a date range, one CSV row per scan (station scans, overrides, gate and re-work). */
-function ScanReport({ ctx }) {
+export function ScanReport({ ctx }) {
   const today = dayKey(todayStart());
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);

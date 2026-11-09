@@ -1,14 +1,16 @@
 import React, { useMemo } from "react";
 import CancellationsPanel from "../../components/CancellationsPanel";
-import { Insight, PageHead, num } from "../CeoDashboard/CeoUi";
+import { Icon, Insight, num } from "../CeoDashboard/CeoUi";
 import { DAY, channelOf, pieceState, plural } from "./pmModel";
 
 // ============================================================
-// Cancellations and Profile. The Cancellations panel is the shared one (the
-// COO uses it too); money is switched off for production. Stock is PmStock.jsx.
+// Cancellations (shown on the Orders page's Cancelled tab, with the full
+// report in a side panel) and the Profile panel. The Cancellations report is
+// the shared one (the COO uses it too); money is switched off for production.
 // ============================================================
 
-export function CancellationsPage({ ctx }) {
+/** What the cancellations say, read out from the orders and pieces themselves. */
+export function CancellationInsights({ ctx, onReport }) {
   const { orders, componentsByOrder, openOrders, openPieces } = ctx;
   // What the cancellations say, from the orders and pieces themselves.
   const s = useMemo(() => {
@@ -29,10 +31,11 @@ export function CancellationsPage({ ctx }) {
     return { last, before, pieces, worked, topReason, topChannel, noReason };
   }, [orders, componentsByOrder]);
   return (
-    <div className="ceo-page">
-      <PageHead title="Cancellations" desc="Orders cancelled, why, and at which stage the pieces were when they came off the floor." />
       <section className="ceo-card pm-says-card">
-        <h3 className="pm-says-title">What This Says</h3>
+        <div className="pm-says-head">
+          <h3 className="pm-says-title">What the Cancellations Say</h3>
+          {onReport && <button type="button" className="ceo-btn" onClick={onReport}><Icon name="doc" />Full cancellation report</button>}
+        </div>
         <div className="pmq-insights">
           <Insight tone={s.last.length > s.before.length ? "warn" : "gold"}>
             <b>{plural(s.last.length, "order")}</b> {s.last.length === 1 ? "was" : "were"} cancelled in the last 30 days, against {num(s.before.length)} in the 30 days before.{" "}
@@ -49,17 +52,16 @@ export function CancellationsPage({ ctx }) {
           {s.noReason.length > 0 && <Insight tone="warn"><b>{plural(s.noReason.length, "cancellation")}</b> {s.noReason.length === 1 ? "has" : "have"} no reason recorded.</Insight>}
         </div>
       </section>
-      <section className="ceo-card pm-classic ceo-keep"><CancellationsPanel hideMoney /></section>
-    </div>
   );
 }
 
-export function ProfilePage({ ctx }) {
+/** The full cancellation report (trend, reasons, stages, list), for a side panel. */
+export const CancellationReport = () => <div className="pm-classic ceo-keep"><CancellationsPanel hideMoney /></div>;
+
+export function ProfileBody({ ctx }) {
   const p = ctx.profile || {};
   return (
-    <div className="ceo-page">
-      <PageHead title="Profile" desc="Your account on the production system." />
-      <section className="ceo-card pm-profile">
+      <section className="pm-profile">
         <span className="pm-profile-avatar">{(p.saleperson || "PM").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("")}</span>
         <dl className="ceo-dl">
           <dt>Name</dt><dd>{p.saleperson || "–"}</dd>
@@ -69,6 +71,5 @@ export function ProfilePage({ ctx }) {
           <dt>Store</dt><dd>{p.store_name || "All"}</dd>
         </dl>
       </section>
-    </div>
   );
 }

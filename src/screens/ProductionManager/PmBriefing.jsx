@@ -219,7 +219,7 @@ export function BriefingCard({ ctx, ins }) {
         </Line>
 
         {ins.waiting && (ins.waiting.requests + ins.waiting.replacements) > 0 && (
-          <Line icon="edit" tone="crit" cta="Open approvals" onClick={() => go("approvals")}>
+          <Line icon="edit" tone="crit" cta="Open approvals" onClick={() => ctx.openRequests()}>
             <Bold>{num(ins.waiting.requests)}</Bold> stage change {ins.waiting.requests === 1 ? "request" : "requests"} and <Bold>{num(ins.waiting.replacements)}</Bold> replacement {ins.waiting.replacements === 1 ? "request wait" : "requests wait"} for your decision.
           </Line>
         )}
@@ -272,7 +272,7 @@ export function ActionsCard({ ctx, ins }) {
     add(n ? {
       key: "decide", icon: "edit", tone: "crit", cta: "Open approvals",
       text: <>Decide the <B>{plural(ins.waiting.requests, "stage change request")}</B> and <B>{plural(ins.waiting.replacements, "replacement request")}</B> waiting for you; the floor cannot move those pieces until you do.</>,
-      open: () => go("approvals"),
+      open: () => ctx.openRequests(),
     } : { key: "decide", icon: "edit", tone: "ok", text: <>Nothing is waiting for your decision: no stage change or replacement requests are open.</> });
   }
 

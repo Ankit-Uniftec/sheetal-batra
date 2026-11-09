@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import formatDate from "../../utils/formatDate";
-import { Columns, Empty, Insight, PageHead, Pager, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
+import { Columns, Drawer, Empty, Icon, Insight, PageHead, Pager, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
+import { ScanReport } from "./PmApprovals";
 import { CsvButton, defineKit } from "../CeoDashboard/dashKit";
 import { csvFromObjects } from "./PmCommon";
 import { DAY, dayKey, pct, plural, todayStart } from "./pmModel";
@@ -47,6 +48,7 @@ export default function PeoplePage({ ctx }) {
   useEffect(() => { need("scans30"); need("qc90"); }, [need]);
   const [period, setPeriod] = useState("7");
   const [page, setPage] = useState(1);
+  const [reportOpen, setReportOpen] = useState(false);
   const scans = lazy.scans30?.rows;
   const qc = lazy.qc90?.rows;
   const days = Number(period);
@@ -132,7 +134,13 @@ export default function PeoplePage({ ctx }) {
     <div className="ceo-page">
       <PageHead title="People" desc="Who scanned what, where and when. Click a person, a station or a bar to see the pieces behind it.">
         <Seg label="Period" value={period} onChange={setPeriod} options={PERIODS} />
+        <button type="button" className="ceo-btn" onClick={() => setReportOpen(true)}><Icon name="download" />Scan Report</button>
       </PageHead>
+      {reportOpen && (
+        <Drawer title="Scan Report" sub="Download every scan in the dates you choose" onClose={() => setReportOpen(false)}>
+          <ScanReport ctx={ctx} />
+        </Drawer>
+      )}
       <div className="ceo-tiles">
         <Tile icon="trend" label="Active Scanners" value={loading ? "…" : num(data.people.length)} note={periodName}
           onClick={loading ? undefined : () => openPieces({ title: "Pieces Scanned", sub: periodName, pieces: piecesOf(data.allPieces) })} />

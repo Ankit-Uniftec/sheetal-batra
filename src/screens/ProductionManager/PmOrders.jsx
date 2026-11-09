@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { HalfMadeBanner } from "../../components/HalfMadeSuggestion";
 import { STAGE_GROUPS } from "../../utils/barcodeService";
-import { Chips, FilterGroup, PageHead, Pager, Seg, num } from "../CeoDashboard/CeoUi";
+import { Chips, Drawer, FilterGroup, PageHead, Pager, Seg, num } from "../CeoDashboard/CeoUi";
+import { CancellationInsights, CancellationReport } from "./PmMore";
 import { FilterDrawer, ListTools, PeriodFacet, usePagePeriod } from "../CeoDashboard/dashKit";
 import { exportOrders } from "./PmCommon";
 import OrderRows from "./PmOrderRows";
@@ -57,7 +58,10 @@ const inTab = (o, tab, today) => {
 
 export default function OrdersPage({ ctx }) {
   const { orders, componentsByOrder, halfMade } = ctx;
-  const [tab, setTab] = useState("running");
+  const [tab, setTab] = useState(ctx.ordersTab || "running");
+  const [report, setReport] = useState(false);
+  // Opened from an old Cancellations link (or anywhere that asks for a tab).
+  useEffect(() => { if (ctx.ordersTab) { setTab(ctx.ordersTab); ctx.setOrdersTab(null); } }, [ctx.ordersTab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("due");
   const [channels, setChannels] = useState([]);
@@ -127,13 +131,14 @@ export default function OrdersPage({ ctx }) {
 
   return (
     <div className="ceo-page">
-      <PageHead title="Orders" desc="Every order the floor makes. Click an order for its pieces, journey and actions." />
+      <PageHead title="Orders" desc="Every order the floor makes, with all its details on the row. Journey, PDF and every other action are on the row; click an order for its full details." />
       {halfMade?.count > 0 && (
         <div className="pm-halfmade-banner"><HalfMadeBanner byOrder={halfMade.byOrder} orders={orders} by={halfMade.me?.email} onUsed={halfMade.reload} /></div>
       )}
       <div className="pm-tabs-scroll">
         <Seg label="Order status" value={tab} onChange={setTab} options={TABS.map((t) => ({ ...t, count: counts[t.value] }))} />
       </div>
+      {tab === "cancelled" && <CancellationInsights ctx={ctx} onReport={() => setReport(true)} />}
       <ListTools
         search={search} onSearch={setSearch} placeholder="Search order, client, product, barcode or PO"
         filters={filterCount} onFilters={() => setDrawer(true)}
@@ -145,6 +150,11 @@ export default function OrdersPage({ ctx }) {
         <p className="pm-count-line">{summary}</p>
       </section>
 
+      {report && (
+        <Drawer wide title="Cancellation Report" sub="Cancelled orders by period, channel, reason and how far they had got" onClose={() => setReport(false)}>
+          <CancellationReport />
+        </Drawer>
+      )}
       <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={clear} count={list.length} noun="orders" sub="Narrow the order list">
         <FilterGroup label="Sort By"><Chips options={SORTS} value={sort} onChange={(v) => setSort(v || "due")} /></FilterGroup>
         <FilterGroup label="Priority"><Chips options={[{ value: "urgent", label: "Urgent only" }]} value={urgentOnly ? "urgent" : ""} onChange={(v) => setUrgentOnly(v === "urgent")} /></FilterGroup>

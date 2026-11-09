@@ -97,7 +97,7 @@ export function FloorBars({ ctx, pieces, stuckOnly = false }) {
 }
 
 export default function TodayPage({ ctx }) {
-  const { lazy, openOrders, openPieces, go, piecesById } = ctx;
+  const { lazy, openOrders, openPieces, go, piecesById, openRequests } = ctx;
   const floor = useFloor(ctx);
   const ins = useInsights(ctx, floor);
   const scans = lazy.scans8?.rows;
@@ -163,12 +163,12 @@ export default function TodayPage({ ctx }) {
       { key: "start", icon: "orders", tone: "warn", count: notStartedSoon.length, label: "Orders due within 5 days with no piece started", open: () => openOrders({ title: "Not Started, Due Soon", sub: "Due within 5 days, no piece scanned yet", orders: notStartedSoon }) },
       { key: "fails", icon: "integrity", tone: "warn", count: failsToday.length, label: "Pieces that failed QC today", loading: !scans || !qc, open: () => openPieces({ title: "Failed QC Today", sub: formatDate(new Date()), pieces: failsToday }) },
       { key: "quiet", icon: "doc", tone: "warn", count: dormant.length, label: "Orders with nothing scanned for 30+ days: close them if made, chase them if not", open: () => openOrders({ title: "Gone Quiet", sub: "Running orders with no scan on any piece for 30 days or more", orders: dormant }) },
-      { key: "requests", icon: "edit", tone: "gold", count: waiting ? waiting.requests : 0, label: "Stage change requests waiting for you", loading: !waiting, cta: "Open approvals", open: () => go("approvals") },
-      { key: "replace", icon: "transfer", tone: "gold", count: waiting ? waiting.replacements : 0, label: "Replacement requests waiting for you", loading: !waiting, cta: "Open approvals", open: () => go("approvals") },
+      { key: "requests", icon: "edit", tone: "gold", count: waiting ? waiting.requests : 0, label: "Stage change requests waiting for you", loading: !waiting, cta: "Decide now", open: () => openRequests() },
+      { key: "replace", icon: "transfer", tone: "gold", count: waiting ? waiting.replacements : 0, label: "Replacement requests waiting for you", loading: !waiting, cta: "Decide now", open: () => openRequests() },
       { key: "urgent", icon: "trend", tone: "gold", count: urgent.length, label: "Urgent orders in production", open: () => openOrders({ title: "Urgent Orders", sub: "Marked urgent, still in production", orders: urgent }) },
       { key: "notstarted", icon: "stock", tone: "gold", count: notStartedActive.length, label: "Pieces of active orders waiting to start at Cloth Issue", open: () => openPieces({ title: "Not Started", sub: "Pieces of active orders waiting for Cloth Issue", pieces: notStartedActive }) },
     ];
-  }, [floor, moves, waiting, todayRow, scans, qc, piecesById, ctx.componentsByOrder, openOrders, openPieces, go]);
+  }, [floor, moves, waiting, todayRow, scans, qc, piecesById, openOrders, openPieces, openRequests, ctx.componentsByOrder]);
   const shown = attention.filter((a) => a.count > 0 || a.loading);
   const urgentN = shown.filter((a) => a.tone === "crit" && a.count > 0).length;
 

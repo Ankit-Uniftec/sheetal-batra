@@ -30,10 +30,11 @@ import "./OverrideHistory.css";
 
 const PER_PAGE = 20;
 
-export default function OverrideHistory({ title = "Production Overrides" }) {
+// initialSearch: open already filtered (for example to one order number).
+export default function OverrideHistory({ title = "Production Overrides", initialSearch = "" }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
 

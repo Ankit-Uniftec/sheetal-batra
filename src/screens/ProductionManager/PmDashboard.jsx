@@ -42,8 +42,11 @@ import QualityPage from "./PmQuality";
 import VendorsPage from "./PmVendors";
 import DispatchPage from "./PmDispatch";
 import PeoplePage from "./PmPeople";
-import ApprovalsPage from "./PmApprovals";
-import { CancellationsPage, ProfilePage } from "./PmMore";
+import RequestsPanel from "./PmApprovals";
+import { ProfileBody } from "./PmMore";
+import ProductionOverrides from "../../components/ProductionOverrides";
+import "../../components/ProductionOverrides.css";
+import OverrideHistory from "../../components/OverrideHistory";
 import StockPage from "./PmStock";
 
 // ============================================================
@@ -53,6 +56,9 @@ import StockPage from "./PmStock";
 // /production-manager-dashboard/classic, linked from the menu.
 // ============================================================
 
+// Every order action (journey, PDF, edit, priority, overrides, complete,
+// cancel) lives on the order itself, so the menu holds pages to read only.
+// Requests & Overrides and the Profile open as side panels over any page.
 const NAV = [
   {
     group: "Run the Floor",
@@ -61,6 +67,7 @@ const NAV = [
       { id: "orders", label: "Orders", icon: "orders" },
       { id: "floor", label: "Floor & Flow", icon: "movements" },
       { id: "planning", label: "Planning", icon: "calendar" },
+      { id: "dispatch", label: "Dispatch & Delivery", icon: "transfer" },
     ],
   },
   {
@@ -68,26 +75,19 @@ const NAV = [
     items: [
       { id: "quality", label: "Quality", icon: "integrity" },
       { id: "vendors", label: "Vendors", icon: "warehouse" },
-      { id: "dispatch", label: "Dispatch & Delivery", icon: "transfer" },
-    ],
-  },
-  {
-    group: "Team",
-    items: [
-      { id: "people", label: "People", icon: "trend" },
-      { id: "approvals", label: "Approvals", icon: "sale" },
-      { id: "cancellations", label: "Cancellations", icon: "close" },
       { id: "stock", label: "Stock", icon: "stock" },
-      { id: "profile", label: "Profile", icon: "doc" },
+      { id: "people", label: "People", icon: "trend" },
     ],
   },
 ];
-// Old links (bookmarks, notifications) still land on the right page.
+// Old links (bookmarks, notifications) still land on the right page, or open
+// the right panel.
 const TAB_ALIASES = {
   overview: "today", production: "floor", qc_history: "quality", rejourneys: "quality", delivery_report: "dispatch",
-  dispatch_report: "dispatch", overrides: "approvals", override_log: "approvals", replacements: "approvals",
-  vendor_delays: "vendors", calendar: "planning", staff: "people",
+  dispatch_report: "dispatch", vendor_delays: "vendors", calendar: "planning", staff: "people", cancellations: "orders",
+  approvals: "today", overrides: "today", override_log: "today", replacements: "today", profile: "today",
 };
+const PANEL_TABS = { approvals: "overrides", overrides: "overrides", override_log: "log", replacements: "replacements" };
 const CalIcon = () => <CalendarIcon />;
 
 // Loaded the first time a page asks for them, then kept.
@@ -135,6 +135,18 @@ export default function PmDashboard() {
   const [prioritising, setPrioritising] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [requests, setRequests] = useState(null);   // { view } when the Requests & Overrides panel is open
+  const [overriding, setOverriding] = useState(null); // the order whose pieces are being moved
+  const [overrideLog, setOverrideLog] = useState(null); // the order whose override history is open
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [ordersTab, setOrdersTab] = useState(null);  // a tab the Orders page should open on
+  // Old links to Approvals, Overrides or Profile open their panel over Today;
+  // an old Cancellations link opens Orders on the Cancelled tab.
+  useEffect(() => {
+    if (PANEL_TABS[rawTab]) setRequests({ view: PANEL_TABS[rawTab] });
+    if (rawTab === "profile") setProfileOpen(true);
+    if (rawTab === "cancellations") setOrdersTab("cancelled");
+  }, [rawTab]);
 
   const apply = useCallback(({ orders: o, components: c, vendorMap: v }) => {
     setOrders(o);
@@ -185,6 +197,12 @@ export default function PmDashboard() {
   }, []);
   // Today needs the requests, the vendor trips and a week of scans.
   useEffect(() => { if (!loading) { need("waiting"); need("movements"); need("scans8"); need("qc8"); } }, [loading, need]);
+
+  const openRequests = useCallback((view = "overrides") => setRequests({ view }), []);
+  /** Re-read what is waiting for a decision (after the Requests panel closes). */
+  const refreshWaiting = useCallback(() => {
+    loadWaiting().then((rows) => setLazy((st) => ({ ...st, waiting: { loading: false, rows } }))).catch(() => {});
+  }, []);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -306,14 +324,17 @@ export default function PmDashboard() {
   const ctx = {
     profile, email: profile?.email || "", orders, ordersById, components, componentsByOrder, piecesById, vendorMap, halfMade,
     lazy, need, syncedAt,
-    openOrder, openOrders, openPieces, go, openJourney, showPopup, navigate,
-    actions: { complete, cancel: setCancelling, edit, priority: setPrioritising, warehousePdf, busy },
+    openOrder, openOrders, openPieces, go, openJourney, showPopup, navigate, ordersTab, setOrdersTab,
+    openRequests,
+    openOverrideLog: (order) => setOverrideLog(order),
+    actions: { complete, cancel: setCancelling, edit, priority: setPrioritising, warehousePdf, override: (o) => setOverriding(o), busy },
   };
   const barcodeSearch = useMemo(() => components.filter((c) => c.barcode).map((c) => ({
     key: `b${c.id}`, kind: "Piece", label: c.barcode, meta: `${pieceName(c)} · ${c.order_no || ""}`, text: c.barcode,
     go: () => { const o = ordersById[c.order_id]; if (o) openOrder(o); },
   })), [components, ordersById, openOrder]);
   const userName = profile?.saleperson || "";
+  const waitingCount = lazy.waiting?.rows ? lazy.waiting.rows.requests + lazy.waiting.rows.replacements : 0;
   const initials = (userName || "PM").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
   const top = stack[stack.length - 1];
   const back = stack.length > 1 ? () => setStack((s) => s.slice(0, -1)) : undefined;
@@ -344,13 +365,19 @@ export default function PmDashboard() {
             </div>
           ))}
           <div className="ceo-nav-group">
+            <span className="ceo-label ceo-nav-title">Decide</span>
+            <button type="button" className="ceo-nav-item" onClick={() => { setNavOpen(false); setRequests({ view: "overrides" }); }}>
+              <Icon name="edit" />Requests &amp; Overrides{waitingCount > 0 && <b className="pm-nav-count">{num(waitingCount)}</b>}
+            </button>
+          </div>
+          <div className="ceo-nav-group">
             <button type="button" className="ceo-nav-item" onClick={() => navigate("/production-manager-dashboard/classic")}><Icon name="movements" />Old Production dashboard</button>
           </div>
           <div className="ceo-nav-foot">
-            <div className="ceo-who">
+            <button type="button" className="ceo-who pm-who" onClick={() => { setNavOpen(false); setProfileOpen(true); }} title="Your profile">
               <span className="ceo-avatar">{initials}</span>
               <span><b title={userName}>{userName || profile?.email}</b><small>{syncedAt ? `Data updated ${syncedAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}` : "Production Manager"}</small></span>
-            </div>
+            </button>
             <div className="ceo-foot-actions">
               <button type="button" className="ceo-btn" onClick={refresh} disabled={refreshing}><Icon name="refresh" />{refreshing ? "Updating" : "Refresh"}</button>
               <button type="button" className="ceo-btn" onClick={handleLogout}><Icon name="logout" />Log out</button>
@@ -368,7 +395,7 @@ export default function PmDashboard() {
             />
             <div className="ceo-top-end">
               <span className="gm-top-actions">
-                <button type="button" className="ceo-btn" onClick={() => go("approvals")} aria-label="Scan and overrides"><Icon name="edit" /><span>Scan & Override</span></button>
+                <button type="button" className="ceo-btn" onClick={() => setRequests({ view: "overrides" })} aria-label="Requests and overrides"><Icon name="edit" /><span>Requests &amp; Overrides</span>{waitingCount > 0 && <b className="pm-top-count">{num(waitingCount)}</b>}</button>
               </span>
               <NotificationBell userEmail={profile?.email} look="soft" onOrderClick={(id) => { const o = ordersById[id]; if (o) openOrder(o); }} />
             </div>
@@ -385,10 +412,7 @@ export default function PmDashboard() {
                 {activeTab === "vendors" && <VendorsPage ctx={ctx} />}
                 {activeTab === "dispatch" && <DispatchPage ctx={ctx} />}
                 {activeTab === "people" && <PeoplePage ctx={ctx} />}
-                {activeTab === "approvals" && <ApprovalsPage ctx={ctx} />}
-                {activeTab === "cancellations" && <CancellationsPage ctx={ctx} />}
                 {activeTab === "stock" && <StockPage ctx={ctx} />}
-                {activeTab === "profile" && <ProfilePage ctx={ctx} />}
               </>
             )}
           </div>
@@ -413,6 +437,27 @@ export default function PmDashboard() {
         )}
         {top && top.type === "order" && ordersById[top.id] && (
           <OrderDrawer order={ordersById[top.id]} ctx={ctx} onClose={closeAll} onBack={back} />
+        )}
+        {requests && (
+          <Drawer wide title="Requests & Overrides" sub="Stage change requests, replacements, moving pieces by override, and the record of every override" onClose={() => { setRequests(null); refreshWaiting(); }}>
+            <RequestsPanel ctx={ctx} initialView={requests.view} />
+          </Drawer>
+        )}
+        {overriding && (
+          <Drawer wide title="Move or Override Pieces" sub={`${overriding.order_no} · choose a piece, then the override`} onClose={() => { const id = overriding.id; setOverriding(null); reloadOrder(id); }}>
+            <div className="pm-classic ceo-keep"><ProductionOverrides currentUserEmail={profile?.email} initialOrder={overriding} /></div>
+          </Drawer>
+        )}
+        {overrideLog && (
+          <Drawer wide title="Override History" sub={`Every override recorded on ${overrideLog.order_no}`} onClose={() => setOverrideLog(null)}>
+            <div className="pm-classic ceo-keep"><OverrideHistory title="Overrides on this order" initialSearch={overrideLog.order_no} /></div>
+          </Drawer>
+        )}
+        {profileOpen && (
+          <Drawer title="Your Profile" sub="Your account on the production system" onClose={() => setProfileOpen(false)}>
+            <ProfileBody ctx={ctx} />
+            <div className="gm-actions"><button type="button" className="ceo-btn" onClick={handleLogout}><Icon name="logout" />Log out</button></div>
+          </Drawer>
         )}
       </div>
 
@@ -459,6 +504,53 @@ function Measurements({ m }) {
   );
 }
 
+/** This order's own requests waiting for a decision, and its QC checks. */
+function OrderChecks({ order: o, ctx }) {
+  const [qc, setQc] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.from("qc_records").select("id, barcode, which_qc, result, fail_reason, outcome, inspected_by, created_at, is_override")
+      .eq("order_id", o.id).order("created_at", { ascending: false })
+      .then(({ data }) => { if (alive) setQc(data || []); });
+    return () => { alive = false; };
+  }, [o.id]);
+  const waiting = (ctx.lazy.waiting?.rows?.requestRows || []).filter((r) => r.order_id === o.id);
+  const waitingRep = (ctx.lazy.waiting?.rows?.replacementRows || []).filter((r) => r.order_id === o.id);
+  const fails = (qc || []).filter((r) => r.result === "fail" && !r.is_override);
+  return (
+    <>
+      {(waiting.length > 0 || waitingRep.length > 0) && (
+        <div className="pm-od-alert">
+          <Icon name="alert" />
+          <span>
+            {waiting.length > 0 && <>{plural(new Set(waiting.map((r) => r.request_group || r.id)).size, "stage change request")} </>}
+            {waiting.length > 0 && waitingRep.length > 0 && "and "}
+            {waitingRep.length > 0 && <>{plural(waitingRep.length, "replacement request")} </>}
+            on this order {waiting.length + waitingRep.length === 1 ? "is" : "are"} waiting for your decision.
+          </span>
+          <button type="button" className="ceo-btn is-small" onClick={() => ctx.openRequests(waiting.length ? "overrides" : "replacements")}>Decide now</button>
+        </div>
+      )}
+      {qc && qc.length > 0 && (
+        <>
+          <p className="pm-dsection">QC Checks on This Order <span className="pm-dsection-note">{plural(qc.length, "check")} · {plural(fails.length, "failure")}</span></p>
+          <div className="pm-qc-list">
+            {qc.slice(0, 8).map((r) => (
+              <div key={r.id} className={`pm-qc-row is-${r.is_override ? "override" : r.result}`}>
+                <span className="pm-qc-result">{r.is_override ? "Override" : r.result === "fail" ? "Failed" : "Passed"}</span>
+                <span className="pm-qc-main">
+                  <b>{r.which_qc === "final" ? "Final QC" : "QC 1"} · <span className="pm-code">{r.barcode}</span></b>
+                  <small>{[formatDate(r.created_at), r.inspected_by, r.fail_reason && `Reason: ${r.fail_reason.trim()}`, r.outcome === "rework" && "Sent back for re-work", r.outcome === "dispose" && "Disposed"].filter(Boolean).join(" · ")}</small>
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 /** One order in the side panel: where it stands, its pieces, and every action. */
 function OrderDrawer({ order: o, ctx, onClose, onBack }) {
   const comps = ctx.componentsByOrder[o.id] || [];
@@ -495,8 +587,11 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
         <button type="button" className="ceo-btn" onClick={() => actions.edit(o)} disabled={busy("edit")}><Icon name="edit" />Edit</button>
         <button type="button" className="ceo-btn" onClick={() => actions.priority(o)}><Icon name="alert" />{isUrgent(o) ? "Priority: Urgent" : "Set Priority"}</button>
         {canAct && <button type="button" className="ceo-btn" onClick={() => actions.complete(o)} disabled={busy("complete")}><Icon name="sale" />{busy("complete") ? "Completing" : "Mark as Completed"}</button>}
+        <button type="button" className="ceo-btn" onClick={() => actions.override(o)} disabled={!comps.length}><Icon name="transfer" />Move or Override Pieces</button>
+        <button type="button" className="ceo-btn" onClick={() => ctx.openOverrideLog(o)}><Icon name="doc" />Override History</button>
         {canAct && <button type="button" className="ceo-btn" onClick={() => actions.cancel(o)}><Icon name="close" />Cancel Order</button>}
       </div>
+      <OrderChecks order={o} ctx={ctx} />
       {ctx.halfMade?.byOrder?.[o.id] && (
         <div className="pm-halfmade"><HalfMadeBadge order={o} suggestions={ctx.halfMade.byOrder[o.id]} by={ctx.halfMade.me?.email} onUsed={ctx.halfMade.reload} /></div>
       )}
