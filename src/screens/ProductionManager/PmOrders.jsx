@@ -144,9 +144,15 @@ export default function OrdersPage({ ctx }) {
         filters={filterCount} onFilters={() => setDrawer(true)}
         onExport={() => exportOrders(`orders ${tabLabel}`, list, ctx)} exportDisabled={!list.length}
       />
-      <section className="ceo-card">
+      <section className="ceo-card pm-orders-list">
+        {/* The summary and the pages at the top as well as the bottom. */}
+        <div className="pm-list-top">
+          <p className="pm-count-line">{summary}</p>
+          <Pager page={page} pages={Math.ceil(list.length / PAGE)} onChange={setPage} />
+        </div>
         <OrderRows ctx={ctx} rows={list.slice((page - 1) * PAGE, page * PAGE)} />
-        <Pager page={page} pages={Math.ceil(list.length / PAGE)} onChange={setPage} />
+        <Pager page={page} pages={Math.ceil(list.length / PAGE)}
+          onChange={(p) => { setPage(p); document.querySelector(".pm-orders-list")?.scrollIntoView({ block: "start", behavior: "smooth" }); }} />
         <p className="pm-count-line">{summary}</p>
       </section>
 

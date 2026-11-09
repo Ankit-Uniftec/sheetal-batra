@@ -912,3 +912,9 @@
 .ceo.pm .pm-od-item b { font-size: 13px; font-weight: 500; color: var(--ceo-ink) !important; line-height: 1.4; overflow-wrap: anywhere; }
 .ceo.pm .pm-od-item.is-wide { grid-column: 1 / -1; }
 @media (max-width: 640px) { .ceo.pm .pm-od-details { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Orders: summary and pages at the top of the list too. */
+.ceo.pm .pm-list-top { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.ceo.pm .pm-list-top .pm-count-line { margin: 0; }
+.ceo.pm .pm-list-top .ceo-pager { margin: 0; }
+.ceo.pm .pm-orders-list { scroll-margin-top: 12px; }
