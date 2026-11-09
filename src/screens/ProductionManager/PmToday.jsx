@@ -2,8 +2,9 @@ import React, { useMemo } from "react";
 import formatDate from "../../utils/formatDate";
 import { Columns, Empty, Icon, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
 import { Card, DueCell, OrderCell, Table, Tile } from "./PmCommon";
+import { BriefingCard, QuestionsCard, useInsights } from "./PmBriefing";
 import {
-  FLOOR_STEPS, channelOf, dayKey, daysLeft, floorKey, hasPromise, isLate, isRunning, isUrgent, overdueDays, pct, pieceState,
+  FLOOR_STEPS, atVendor, atWh2, channelOf, dayKey, daysLeft, floorKey, hasPromise, isDormant, isLate, isOwnTrip, isRunning, isStuck, isUrgent, pct, pieceState,
   plural, todayStart,
 } from "./pmModel";
 
@@ -23,13 +24,23 @@ export function useFloor(ctx) {
     const running = orders.filter(isRunning);
     const pieces = running.flatMap((o) => (componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at));
     const by = (s) => pieces.filter((c) => pieceState(c) === s);
-    const inHouse = by("in_house");
+    // In our warehouses: Delhi (1) and our own Delhi (2). Outside vendors apart.
+    const wh2 = by("at_wh2");
+    const inHouse = [...by("in_house"), ...wh2];
     const atVendor = by("at_vendor");
     const late = running.filter((o) => isLate(o, today));
+    // Active: something on the order was scanned in the last 30 days.
+    const now = Date.now();
+    const dormant = running.filter((o) => isDormant(o, componentsByOrder[o.id] || [], now));
+    const dormantIds = new Set(dormant.map((o) => o.id));
+    const active = running.filter((o) => !dormantIds.has(o.id));
+    const stuck = inHouse.filter((c) => isStuck(c, now));
     return {
-      today, running, pieces, inHouse, atVendor, late,
+      today, running, pieces, inHouse, wh2, atVendor, late, dormant, active, dormantIds,
+      activePieces: pieces.filter((c) => !dormantIds.has(c.order_id)),
       notStarted: by("not_started"), finished: by("finished"), disposed: by("disposed"),
-      stuck: inHouse.filter((c) => overdueDays(c) > 0),
+      stuck, stuckActive: stuck.filter((c) => !dormantIds.has(c.order_id)),
+      lateActive: late.filter((o) => !dormantIds.has(o.id)),
     };
   }, [orders, componentsByOrder]);
 }
@@ -39,36 +50,43 @@ export function FloorBars({ ctx, pieces, stuckOnly = false }) {
   const rows = useMemo(() => FLOOR_STEPS.map((g) => {
     const here = pieces.filter((c) => floorKey(c) === g.key);
     const inside = here.filter((c) => !c.is_outside_wh);
-    const outside = here.filter((c) => c.is_outside_wh);
-    return { g, here, inside, outside, stuck: inside.filter((c) => overdueDays(c) > 0) };
+    const second = here.filter(atWh2);
+    const outside = here.filter(atVendor);
+    return { g, here, inside, second, outside, stuck: [...inside, ...second].filter((c) => isStuck(c)) };
   }).filter((r) => r.here.length), [pieces]);
   if (!rows.length) return <Empty text="No pieces on the floor." />;
   const max = Math.max(...rows.map((r) => r.here.length), 1);
   return (
     <div className="pm-floor">
-      <div className="pm-floor-legend"><span><i className="is-in" />In the warehouse</span><span><i className="is-out" />At vendors</span>{!stuckOnly && <span><i className="is-stuck" />Past the stage limit</span>}</div>
-      {rows.map(({ g, here, inside, outside, stuck }) => (
+      <div className="pm-floor-legend"><span><i className="is-in" />SB WH Delhi (1)</span><span><i className="is-wh2" />SB WH Delhi (2)</span><span><i className="is-out" />Outside vendors</span>{!stuckOnly && <span><i className="is-stuck" />Not moved for 7+ days</span>}</div>
+      {rows.map(({ g, here, inside, second, outside, stuck }) => (
         <div key={g.key} className="pm-floor-row">
           <button type="button" className="pm-floor-name" onClick={() => ctx.openPieces({ title: g.label, sub: "Pieces of running orders at this stage", pieces: here })}>
             <b>{g.label}</b><small>{num(here.length)}</small>
           </button>
           <span className="pm-floor-track">
             {inside.length > 0 && (
-              <button type="button" className="pm-floor-seg is-in" style={{ width: `${(inside.length / max) * 100}%` }} title={`${num(inside.length)} in the warehouse`}
-                onClick={() => ctx.openPieces({ title: `${g.label}: In the Warehouse`, sub: "Being worked on in-house", pieces: inside })}>
+              <button type="button" className="pm-floor-seg is-in" style={{ width: `${(inside.length / max) * 100}%` }} title={`${num(inside.length)} at SB WH Delhi (1)`}
+                onClick={() => ctx.openPieces({ title: `${g.label}: SB WH Delhi (1)`, sub: "Being worked on in the main warehouse", pieces: inside })}>
                 <span>{num(inside.length)}</span>
               </button>
             )}
+            {second.length > 0 && (
+              <button type="button" className="pm-floor-seg is-wh2" style={{ width: `${(second.length / max) * 100}%` }} title={`${num(second.length)} at SB WH Delhi (2)`}
+                onClick={() => ctx.openPieces({ title: `${g.label}: SB WH Delhi (2)`, sub: "At our second warehouse", pieces: second })}>
+                <span>{num(second.length)}</span>
+              </button>
+            )}
             {outside.length > 0 && (
-              <button type="button" className="pm-floor-seg is-out" style={{ width: `${(outside.length / max) * 100}%` }} title={`${num(outside.length)} at vendors`}
-                onClick={() => ctx.openPieces({ title: `${g.label}: At Vendors`, sub: "Out with an outside vendor", pieces: outside })}>
+              <button type="button" className="pm-floor-seg is-out" style={{ width: `${(outside.length / max) * 100}%` }} title={`${num(outside.length)} at outside vendors`}
+                onClick={() => ctx.openPieces({ title: `${g.label}: At Outside Vendors`, sub: "Out with an outside vendor", pieces: outside })}>
                 <span>{num(outside.length)}</span>
               </button>
             )}
           </span>
           {!stuckOnly && (
             <button type="button" className={`pm-floor-stuck${stuck.length ? "" : " is-zero"}`} disabled={!stuck.length}
-              onClick={() => ctx.openPieces({ title: `${g.label}: Past the Stage Limit`, sub: "In the warehouse longer than the stage allows", pieces: stuck })}>
+              onClick={() => ctx.openPieces({ title: `${g.label}: Not Moved for 7+ Days`, sub: "In our warehouses, no scan for a week or more", pieces: stuck })}>
               {num(stuck.length)}
             </button>
           )}
@@ -81,6 +99,7 @@ export function FloorBars({ ctx, pieces, stuckOnly = false }) {
 export default function TodayPage({ ctx }) {
   const { lazy, openOrders, openPieces, go, piecesById } = ctx;
   const floor = useFloor(ctx);
+  const ins = useInsights(ctx, floor);
   const scans = lazy.scans8?.rows;
   const moves = lazy.movements?.rows;
   const waiting = lazy.waiting?.rows;
@@ -114,11 +133,13 @@ export default function TodayPage({ ctx }) {
   const avgOf = (k) => (prior.length ? prior.reduce((s, d) => s + d[k], 0) / prior.length : 0);
 
   const attention = useMemo(() => {
-    const { running, late, stuck, notStarted, today } = floor;
+    const { running, late, stuckActive, notStarted, today, dormant, dormantIds } = floor;
     const dueSoon = running.filter((o) => hasPromise(o) && [0, 1].includes(daysLeft(o, today)));
-    const longStuck = stuck.filter((c) => overdueDays(c) >= 3);
-    const overdueTrips = (moves || []).filter((m) => m.overdue && m.component_id);
+    const longStuck = stuckActive;
+    const overdueTrips = (moves || []).filter((m) => m.overdue && m.component_id && !isOwnTrip(m));
     const overduePieces = [...new Set(overdueTrips.map((m) => m.component_id))].map((id) => piecesById[id]).filter(Boolean);
+    const wh2Trips = (moves || []).filter((m) => m.overdue && m.component_id && isOwnTrip(m));
+    const wh2Late = [...new Set(wh2Trips.map((m) => m.component_id))].map((id) => piecesById[id]).filter(Boolean);
     const notStartedSoon = running.filter((o) => {
       const left = daysLeft(o, today);
       const live = (ctx.componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at);
@@ -131,20 +152,21 @@ export default function TodayPage({ ctx }) {
     });
     const failsToday = todayRow ? [...todayRow.fails].map((id) => piecesById[id]).filter(Boolean) : [];
     const urgent = running.filter(isUrgent);
-    const veryLate = late.filter((o) => (daysLeft(o, today) ?? 0) <= -30);
+    const notStartedActive = notStarted.filter((c) => !dormantIds.has(c.order_id));
     return [
       { key: "late", icon: "alert", tone: "crit", count: late.length, label: "Orders past their due date, still in production", open: () => openOrders({ title: "Late Orders", sub: "Past the due date (T-2), still in production", orders: late }) },
       { key: "due", icon: "bell", tone: "crit", count: dueSoon.length, label: "Orders due today or tomorrow, not finished", open: () => openOrders({ title: "Due Today or Tomorrow", sub: "Still in production", orders: dueSoon }) },
-      { key: "vendor", icon: "warehouse", tone: "crit", count: overduePieces.length, label: "Pieces still at vendors after their return date", loading: !moves, open: () => openPieces({ title: "Overdue at Vendors", sub: "Past the return date set when they were sent", pieces: overduePieces }) },
-      { key: "stuck", icon: "refresh", tone: "warn", count: longStuck.length, label: "Pieces stuck 3 days or more past their stage limit", open: () => openPieces({ title: "Stuck 3+ Days", sub: "In the warehouse, 3 or more days past the stage's time limit", pieces: longStuck }) },
+      { key: "vendor", icon: "warehouse", tone: "crit", count: overduePieces.length, label: "Pieces still at outside vendors after their return date", loading: !moves, open: () => openPieces({ title: "Overdue at Vendors", sub: "Past the return date set when they were sent; our own SB WH Delhi (2) is not counted", pieces: overduePieces }) },
+      { key: "wh2", icon: "warehouse", tone: "warn", count: wh2Late.length, label: "Pieces at SB WH Delhi (2) past their planned return date", loading: !moves, open: () => openPieces({ title: "Late at SB WH Delhi (2)", sub: "At our second warehouse past the planned return date", pieces: wh2Late }) },
+      { key: "stuck", icon: "refresh", tone: "warn", count: longStuck.length, label: "Pieces of active orders not moved for 7+ days", open: () => openPieces({ title: "Stuck: Not Moved for 7+ Days", sub: "Pieces of active orders in our warehouses with no scan for a week or more", pieces: longStuck }) },
       { key: "close", icon: "sale", tone: "warn", count: readyToClose.length, label: "Orders with every piece past Final QC, ready to mark completed", open: () => openOrders({ title: "Ready to Mark Completed", sub: "Every piece has passed Final QC", orders: readyToClose }) },
       { key: "start", icon: "orders", tone: "warn", count: notStartedSoon.length, label: "Orders due within 5 days with no piece started", open: () => openOrders({ title: "Not Started, Due Soon", sub: "Due within 5 days, no piece scanned yet", orders: notStartedSoon }) },
       { key: "fails", icon: "integrity", tone: "warn", count: failsToday.length, label: "Pieces that failed QC today", loading: !scans || !qc, open: () => openPieces({ title: "Failed QC Today", sub: formatDate(new Date()), pieces: failsToday }) },
-      { key: "verylate", icon: "doc", tone: "warn", count: veryLate.length, label: "Orders more than 30 days late: check whether they are already made and need closing", open: () => openOrders({ title: "More Than 30 Days Late", sub: "Often made already but never marked completed or dispatched", orders: veryLate }) },
+      { key: "quiet", icon: "doc", tone: "warn", count: dormant.length, label: "Orders with nothing scanned for 30+ days: close them if made, chase them if not", open: () => openOrders({ title: "Gone Quiet", sub: "Running orders with no scan on any piece for 30 days or more", orders: dormant }) },
       { key: "requests", icon: "edit", tone: "gold", count: waiting ? waiting.requests : 0, label: "Stage change requests waiting for you", loading: !waiting, cta: "Open approvals", open: () => go("approvals") },
       { key: "replace", icon: "transfer", tone: "gold", count: waiting ? waiting.replacements : 0, label: "Replacement requests waiting for you", loading: !waiting, cta: "Open approvals", open: () => go("approvals") },
       { key: "urgent", icon: "trend", tone: "gold", count: urgent.length, label: "Urgent orders in production", open: () => openOrders({ title: "Urgent Orders", sub: "Marked urgent, still in production", orders: urgent }) },
-      { key: "notstarted", icon: "stock", tone: "gold", count: notStarted.length, label: "Pieces waiting to start at Cloth Issue", open: () => openPieces({ title: "Not Started", sub: "Waiting to be scanned at Cloth Issue", pieces: notStarted }) },
+      { key: "notstarted", icon: "stock", tone: "gold", count: notStartedActive.length, label: "Pieces of active orders waiting to start at Cloth Issue", open: () => openPieces({ title: "Not Started", sub: "Pieces of active orders waiting for Cloth Issue", pieces: notStartedActive }) },
     ];
   }, [floor, moves, waiting, todayRow, scans, qc, piecesById, ctx.componentsByOrder, openOrders, openPieces, go]);
   const shown = attention.filter((a) => a.count > 0 || a.loading);
@@ -191,14 +213,15 @@ export default function TodayPage({ ctx }) {
     <div className="ceo-page">
       <PageHead title={`${hello}${first ? `, ${first}` : ""}`} desc={`${now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}. Here is the floor today; click any number to see what is behind it.`} />
       <div className="ceo-tiles">
-        <Tile icon="orders" label="In Production" value={num(floor.running.length)} note={`${num(floor.pieces.length)} pieces`} onClick={() => openOrders({ title: "In Production", sub: "Every running order", orders: floor.running })} />
-        <Tile icon="alert" tone={floor.late.length ? "warn" : undefined} label="Late Orders" value={num(floor.late.length)} note={`${pct(floor.late.length, floor.running.filter(hasPromise).length)}% of dated orders`} onClick={() => openOrders({ title: "Late Orders", sub: "Past the due date (T-2), still in production", orders: floor.late })} />
+        <Tile icon="orders" label="In Production" value={num(floor.running.length)} note={`${num(floor.active.length)} moving · ${num(floor.dormant.length)} quiet 30+ days`} onClick={() => openOrders({ title: "In Production", sub: "Every running order", orders: floor.running })} />
+        <Tile icon="alert" tone={floor.late.length ? "warn" : undefined} label="Late Orders" value={num(floor.late.length)} note={`${num(floor.lateActive.length)} still moving · ${pct(floor.late.length, floor.running.filter(hasPromise).length)}% of dated orders`} onClick={() => openOrders({ title: "Late Orders", sub: "Past the due date (T-2), still in production", orders: floor.late })} />
         <Tile icon="bell" label="Due This Week" value={num(dueWeek.length)} note="Next 7 days" onClick={() => openOrders({ title: "Due This Week", sub: "Due in the next 7 days, still in production", orders: dueWeek })} />
-        <Tile icon="movements" label="Pieces on the Floor" value={num(floor.inHouse.length)} note={`${num(floor.atVendor.length)} at vendors`} onClick={() => openPieces({ title: "Pieces on the Floor", sub: "Being worked on in the warehouse", pieces: floor.inHouse })} />
+        <Tile icon="movements" label="Pieces on the Floor" value={num(floor.inHouse.length)} note={`${num(floor.wh2.length)} at Delhi (2) · ${num(floor.atVendor.length)} at vendors`} onClick={() => openPieces({ title: "Pieces on the Floor", sub: "Being worked on in the warehouse", pieces: floor.inHouse })} />
         <Tile icon="trend" label="Scans Today" value={todayRow ? num(todayRow.scans) : "…"} delta={todayRow?.scans ? vs(todayRow.scans, scansAvg) : null} note={todayRow && !todayRow.scans ? (lastScan ? `None yet · last ${lastScan}` : "None yet today") : "vs 7-day average"} onClick={() => go("people")} />
       </div>
 
       <div className="ceo-grid">
+        <BriefingCard ctx={ctx} ins={ins} />
         <Card span={12} title="Needs Your Attention" sub={shown.length ? `${num(shown.filter((a) => a.count).length)} things to look at${urgentN ? `, ${num(urgentN)} to act on now` : ""}. Click one to see the list.` : undefined}>
           {!shown.length ? <Empty text="Nothing needs your attention right now." /> : (
             <div className="pm-actions">
@@ -217,7 +240,7 @@ export default function TodayPage({ ctx }) {
           )}
         </Card>
 
-        <Card span={7} md={12} title="The Floor Right Now" sub={`${num(floor.inHouse.length)} in the warehouse · ${num(floor.atVendor.length)} at vendors · ${num(floor.stuck.length)} past the stage limit`}>
+        <Card span={7} md={12} title="The Floor Right Now" sub={`${num(floor.inHouse.length - floor.wh2.length)} at Delhi (1) · ${num(floor.wh2.length)} at Delhi (2) · ${num(floor.atVendor.length)} at outside vendors · ${num(floor.stuck.length)} not moved for 7+ days`}>
           <FloorBars ctx={ctx} pieces={[...floor.inHouse, ...floor.atVendor]} />
         </Card>
 
@@ -249,6 +272,8 @@ export default function TodayPage({ ctx }) {
           )}
         </Card>
 
+        <QuestionsCard ctx={ctx} ins={ins} />
+
         <Card span={6} md={12} title="Daily Throughput" sub="Pieces finished each day, last 8 days. Click a day to see the pieces.">
           {!days ? <Empty text="Loading…" /> : (
             <Columns data={days.map((d) => ({ name: d.name, value: d.finishedN, ids: [...d.finished] }))} money={false} name="Pieces finished" height={250}
@@ -257,7 +282,7 @@ export default function TodayPage({ ctx }) {
           )}
         </Card>
 
-        <Card span={6} md={12} title="Due Date Pressure" sub="Running orders by days to their due date. Click a bar to see the orders.">
+        <Card span={6} md={12} title="Due Date Pressure" sub={`Client orders by days to their due date; ${num(floor.late.length - floor.lateActive.length)} of the ${num(floor.late.length)} late ones have had nothing scanned for 30+ days. Click a bar to see the orders.`}>
           <Columns data={pressure} money={false} name="Orders" height={250} highlight={(d) => d.name.startsWith("Late") || d.name === "Today"}
             onPick={(d) => { const b = pressure.find((x) => x.name === d.name); if (b) openOrders({ title: `Due: ${b.name}`, sub: "Running orders, by their due date (T-2)", orders: b.list }); }} />
         </Card>

@@ -75,15 +75,75 @@ export const isFinishedPiece = (c) => FINISHED.has(c.current_stage);
 export const isReadyPiece = (c) => READY.has(c.current_stage);
 export const isRemovedPiece = (c) => !!c.cancelled_at || c.current_stage === "disposed" || c.current_stage === "scrapped";
 
-/** Where a piece is: not_started · in_house · at_vendor · finished · removed. */
+// SB WH Delhi (2) is our own second warehouse. A trip there is recorded like a
+// vendor trip, but the piece is still with us, so it is never counted as "at a
+// vendor" (the same rule Vendor Delays follows).
+export const OWN_WH2 = "SB WH Delhi (2)";
+export const isWh2Name = (n) => /^sb wh delhi \(2\)$/i.test(String(n || "").trim());
+/** A trip to our own SB WH Delhi (2), not to an outside vendor. */
+export const isOwnTrip = (m) => !!m?.is_factory2 || isWh2Name(m?.vendor_name);
+/** The piece is at SB WH Delhi (2) right now. */
+export const atWh2 = (c) => !!c.is_outside_wh && isWh2Name(c.vendor_name);
+/** The piece is out with an outside vendor right now. */
+export const atVendor = (c) => !!c.is_outside_wh && !isWh2Name(c.vendor_name);
+
+/** Where a piece is: not_started · in_house · at_wh2 · at_vendor · finished · disposed · removed. */
 export function pieceState(c) {
   if (c.cancelled_at || c.current_stage === "scrapped") return "removed";
   if (c.current_stage === "disposed") return "disposed";
   if (FINISHED.has(c.current_stage)) return "finished";
-  if (c.is_outside_wh) return "at_vendor";
+  if (c.is_outside_wh) return atWh2(c) ? "at_wh2" : "at_vendor";
   if (c.current_stage === "order_received") return "not_started";
   return "in_house";
 }
+// ------------------------------------------------------------ ACTIVITY
+// Many "running" orders have not moved for weeks: most were made and sent
+// without the system being closed, some are forgotten. Separating them keeps
+// the live work readable.
+export const DORMANT_DAYS = 30;
+/** When the piece last moved (its last stage change; its creation when it never moved). */
+export const lastMoveAt = (c) => new Date(c.stage_updated_at || c.created_at || 0).getTime();
+/** Whole days since the piece last moved. */
+export const idleDays = (c, now = Date.now()) => Math.max(0, Math.floor((now - lastMoveAt(c)) / DAY));
+/** When anything on the order last moved (the order date when nothing has). */
+export function orderLastMove(o, comps = []) {
+  const live = comps.filter((c) => !c.cancelled_at);
+  const t = live.length ? Math.max(...live.map(lastMoveAt)) : 0;
+  return Math.max(t, new Date(o.created_at || 0).getTime());
+}
+/** A piece counts as stuck when it has not moved for STUCK_DAYS or more. Stage
+ *  time limits are mostly one day, so "past the limit" covers nearly every piece
+ *  and cannot tell a held-up piece from a busy one; a week without a scan can. */
+export const STUCK_DAYS = 7;
+export const isStuck = (c, now = Date.now()) => idleDays(c, now) >= STUCK_DAYS;
+
+/** A running order nothing has moved on for DORMANT_DAYS or more. */
+export const isDormant = (o, comps, now = Date.now()) => isRunning(o) && (now - orderLastMove(o, comps)) / DAY >= DORMANT_DAYS;
+
+/** A running order promised to a client, due between `from` and `to` days from today (inclusive). */
+export function dueIn(o, from, to, today = todayStart()) {
+  if (!isRunning(o) || !hasPromise(o)) return false;
+  const d = daysLeft(o, today);
+  return d != null && d >= from && d <= to;
+}
+
+const READY_STAGES = new Set(["final_qc_passed", "production_complete", "packaging_dispatch"]);
+const SENT_OR_CLOSED = new Set(["dispatched", "delivered", "cancelled", "revoked", "returned", "exchange_return"]);
+/** Orders not yet sent (completed orders included) whose every live piece is made
+ *  or already sent, with at least one piece waiting to go out. */
+export function readyToDispatch(orders, componentsByOrder, now = Date.now()) {
+  const out = [];
+  orders.forEach((o) => {
+    if (SENT_OR_CLOSED.has(statusOf(o)) || o.warehouse_stage === "dispatched") return;
+    const live = (componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at && c.current_stage !== "disposed" && c.current_stage !== "scrapped");
+    const waiting = live.filter((c) => READY_STAGES.has(c.current_stage));
+    if (!waiting.length || !live.every((c) => READY_STAGES.has(c.current_stage) || c.current_stage === "dispatched")) return;
+    const since = Math.max(...waiting.map((c) => new Date(c.stage_updated_at || o.created_at).getTime()));
+    out.push({ o, since, waitDays: Math.floor((now - since) / DAY), partial: live.some((c) => c.current_stage === "dispatched") });
+  });
+  return out.sort((a, b) => a.since - b.since);
+}
+
 /** Days a piece has been past its stage limit (0 when within it). */
 export function overdueDays(c, now = Date.now()) {
   if (!c.stage_deadline) return 0;

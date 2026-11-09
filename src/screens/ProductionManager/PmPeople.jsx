@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import formatDate from "../../utils/formatDate";
-import { Columns, Empty, PageHead, Pager, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
+import { Columns, Empty, Insight, PageHead, Pager, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
 import { CsvButton, defineKit } from "../CeoDashboard/dashKit";
 import { csvFromObjects } from "./PmCommon";
-import { dayKey, pct, plural, todayStart } from "./pmModel";
+import { DAY, dayKey, pct, plural, todayStart } from "./pmModel";
 
 // ============================================================
 // People: who scanned what, where and when, how much of it was on time, the
@@ -94,8 +94,11 @@ export default function PeoplePage({ ctx }) {
       }
     });
     const peopleList = Object.values(people).sort((a, b) => b.value - a.value);
+    const prevStart = start - days * DAY;
+    const before = new Set(scans.filter((t) => { const ms = new Date(t.scanned_at).getTime(); return ms >= prevStart && ms < start; }).map((t) => nameOf(t.scanned_by)));
+    const missing = days < 30 ? [...before].filter((n) => !people[n] && n !== "Not recorded") : [];
     return {
-      list, timed, onTime, manual, hours, dayRows, allPieces, latePieces,
+      list, timed, onTime, manual, hours, dayRows, allPieces, latePieces, missing,
       people: peopleList,
       stations: Object.values(stations).sort((a, b) => b.value - a.value),
       manualPeople: peopleList.filter((p) => p.manual > 0).sort((a, b) => b.manual - a.manual),
@@ -143,6 +146,31 @@ export default function PeoplePage({ ctx }) {
 
       {loading ? <section className="ceo-card"><Empty text="Loading the scans…" /></section> : (
         <div className="ceo-grid">
+          <Card span={12} title="What This Says">
+            <div className="pmq-insights">
+              {!data.list.length ? <Insight>No scans were recorded {periodName.toLowerCase()}.</Insight> : (() => {
+                const top = data.people[0];
+                const isGate = (p) => [...p.stations].every((st) => /security|gate/i.test(st));
+                const topMaker = data.people.find((p) => !isGate(p));
+                const busiest = [...data.hours].sort((a, b) => b.value - a.value)[0];
+                const firstHour = data.hours.findIndex((h) => h.value > 0);
+                const lastHour = 23 - [...data.hours].reverse().findIndex((h) => h.value > 0);
+                const lowest = data.people.filter((x) => x.timed >= 20).sort((a, b) => a.onTime / a.timed - b.onTime / b.timed)[0];
+                const topManual = data.manualPeople[0];
+                return (
+                  <>
+                    {isGate(top) && topMaker
+                      ? <Insight>Gate scans aside, <b>{topMaker.name}</b> scanned the most: <b>{num(topMaker.value)}</b> scans at {[...topMaker.stations].slice(0, 3).join(", ")}. The security gate recorded {num(top.value)} scans ({pct(top.value, data.list.length)}% of all).</Insight>
+                      : <Insight><b>{top.name}</b> scanned the most: <b>{num(top.value)}</b> scans, {pct(top.value, data.list.length)}% of all {num(data.list.length)}, across {plural(top.stations.size, "station")}.</Insight>}
+                    <Insight>The floor scanned between <b>{String(firstHour).padStart(2, "0")}:00</b> and <b>{String(lastHour + 1).padStart(2, "0")}:00</b>; the busiest hour was <b>{busiest.name}</b> with {plural(busiest.value, "scan")}.</Insight>
+                    {data.timed > 0 && <Insight tone={pct(data.onTime, data.timed) < 80 ? "warn" : "gold"}><b>{pct(data.onTime, data.timed)}%</b> of timed scans moved pieces on within the stage limit.{lowest && pct(lowest.onTime, lowest.timed) < pct(data.onTime, data.timed) ? <> The lowest share is <b>{lowest.name}</b> at {pct(lowest.onTime, lowest.timed)}%.</> : null}</Insight>}
+                    {data.manual > 0 && <Insight tone={pct(data.manual, data.list.length) > 10 ? "warn" : "gold"}><b>{num(data.manual)}</b> moves ({pct(data.manual, data.list.length)}%) were made by manual override instead of a station scan{topManual ? <>, most by <b>{topManual.name}</b> ({num(topManual.manual)})</> : null}.</Insight>}
+                    {data.missing.length > 0 && <Insight tone="warn">Scanned in the {days === 1 ? "day" : `${days} days`} before but not {periodName.toLowerCase()}: <b>{data.missing.slice(0, 6).join(", ")}</b>{data.missing.length > 6 ? ` and ${num(data.missing.length - 6)} more` : ""}.</Insight>}
+                  </>
+                );
+              })()}
+            </div>
+          </Card>
           <Card span={6} md={12} title="Scans by Person" sub={`${periodName}. Click a person to see the pieces they scanned.`}>
             <RankBars rows={data.people} limit={10} format={(v) => plural(v, "scan")}
               sub={(r) => `${[...r.stations].slice(0, 3).join(", ") || "No station"}${r.stations.size > 3 ? ` +${r.stations.size - 3}` : ""}${r.timed ? ` · ${pct(r.onTime, r.timed)}% on time` : ""}`}

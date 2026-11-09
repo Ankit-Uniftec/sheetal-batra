@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { STAGE_GROUPS } from "../../utils/barcodeService";
-import { Chips, Empty, FilterButton, FilterGroup, Icon, PageHead, RankBars, barValueLabel, num, textOn } from "../CeoDashboard/CeoUi";
+import { Chips, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, RankBars, barValueLabel, num, textOn } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { OrdersTable } from "./PmCommon";
 import {
-  channelOf, dayKey, daysLeft, dueDay, floorKey, hasPromise, isLate, isRunning, pieceState, plural, todayStart,
+  atVendor, atWh2, channelOf, dayKey, daysLeft, dueDay, floorKey, hasPromise, isLate, isRunning, pieceState, plural, todayStart,
 } from "./pmModel";
 
 // ============================================================
@@ -19,7 +19,7 @@ const { Tile, Card } = defineKit({
     "Due This Week": "Running orders whose due date (two days before the client's delivery date) falls in the next 7 days, today included.",
     "Pieces Due in 14 Days": "Pieces of running orders due in the next 14 days, today included, not counting cancelled pieces.",
     "Late Orders": "Running orders past their due date. Website and stock orders are not counted.",
-    "No Due Date": "Running orders with no delivery date set, so they cannot be planned. Ask the store to add one.",
+    "No Due Date": "Running client orders with no delivery date set, so they cannot be planned. Ask the store to add one.",
   },
   cards: {
     Calendar: "Running orders by their due date (two days before the client's delivery date). Past days with orders still open are shaded. Click a day to see its orders.",
@@ -34,7 +34,8 @@ const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const STATES = [
   { key: "not_started", name: "Not started", color: "#6a4f0c" },
   { key: "in_house", name: "In the warehouse", color: "#a9821f" },
-  { key: "at_vendor", name: "At vendors", color: "#cfae4e" },
+  { key: "at_wh2", name: "At Delhi (2)", color: "#cfae4e" },
+  { key: "at_vendor", name: "At outside vendors", color: "#d8c08a" },
   { key: "finished", name: "Finished", color: "#e6d18f" },
 ];
 const GROUP_LABEL = Object.fromEntries(STAGE_GROUPS.map((g) => [g.key, g.label]));
@@ -46,8 +47,10 @@ export default function PlanningPage({ ctx }) {
   const [channels, setChannels] = useState([]);
   const [drawer, setDrawer] = useState(false);
 
-  const running = useMemo(() => orders.filter((o) => isRunning(o) && (!channels.length || channels.includes(channelOf(o)))), [orders, channels]);
-  const channelList = useMemo(() => [...new Set(orders.filter(isRunning).map(channelOf))].sort(), [orders]);
+  // Client orders only: website and stock orders are not promised by a date,
+  // the same rule Today and Orders use.
+  const running = useMemo(() => orders.filter((o) => isRunning(o) && hasPromise(o) && (!channels.length || channels.includes(channelOf(o)))), [orders, channels]);
+  const channelList = useMemo(() => [...new Set(orders.filter((o) => isRunning(o) && hasPromise(o)).map(channelOf))].sort(), [orders]);
   const livePieces = (o) => (componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at && pieceState(c) !== "removed");
 
   const byDay = useMemo(() => {
@@ -65,7 +68,7 @@ export default function PlanningPage({ ctx }) {
       const date = new Date(month.y, month.m, d);
       const k = dayKey(date);
       const list = byDay[k] || [];
-      out.push({ key: k, date, d, list, past: date < today, today: k === dayKey(today), late: list.filter((o) => hasPromise(o)).length });
+      out.push({ key: k, date, d, list, past: date < today, today: k === dayKey(today), late: list.length });
     }
     return out;
   }, [month, byDay]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -96,7 +99,12 @@ export default function PlanningPage({ ctx }) {
       if (st === "not_started") { key = "not_started"; name = "Not started"; }
       else if (st === "finished") { key = "finished"; name = "Finished"; }
       else if (st === "disposed") { key = "disposed"; name = "Disposed, to restart"; }
-      else { key = floorKey(c) || "other"; name = `${GROUP_LABEL[key] || "Other"}${c.is_outside_wh ? " (at vendor)" : ""}`; if (c.is_outside_wh) key += ":v"; }
+      else {
+        key = floorKey(c) || "other";
+        const where = atVendor(c) ? " (at vendor)" : atWh2(c) ? " (at Delhi (2))" : "";
+        name = `${GROUP_LABEL[key] || "Other"}${where}`;
+        if (atVendor(c)) key += ":v"; else if (atWh2(c)) key += ":w2";
+      }
       const r = m[key] || (m[key] = { key, name, value: 0, list: [] });
       r.value += 1; r.list.push(c);
     }));
@@ -107,11 +115,11 @@ export default function PlanningPage({ ctx }) {
   const noDate = running.filter((o) => !dueDay(o));
   const pieces14 = load.reduce((s, r) => s + r.total, 0);
   const shift = (n) => setMonth((p) => { const d = new Date(p.y, p.m + n, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
-  const chName = channels.length ? channels.join(", ") : "All channels";
+  const chName = channels.length ? channels.join(", ") : "All client orders";
 
   return (
     <div className="ceo-page">
-      <PageHead title="Planning" desc="What is due when, by the warehouse date (two days before the client's delivery date). Click a day, a bar or a stage to see what is behind it.">
+      <PageHead title="Planning" desc="What is due when, by the warehouse date (two days before the client's delivery date). Client orders only; website and stock orders are not promised by a date. Click a day, a bar or a stage to see what is behind it.">
         <FilterButton count={channels.length ? 1 : 0} onClick={() => setDrawer(true)} />
       </PageHead>
       <div className="ceo-tiles">
@@ -122,6 +130,29 @@ export default function PlanningPage({ ctx }) {
       </div>
 
       <div className="ceo-grid">
+        <Card span={12} title="What This Says">
+          <div className="pmq-insights">
+            {(() => {
+              const busiest = [...load].sort((a, b) => b.total - a.total)[0];
+              const weekPieces = load.slice(0, 7).reduce((s, r) => s + r.total, 0);
+              const weekNotStarted = load.slice(0, 7).reduce((s, r) => s + r.not_started, 0);
+              const weekVendor = load.slice(0, 7).reduce((s, r) => s + r.at_vendor, 0);
+              const weekDone = load.slice(0, 7).reduce((s, r) => s + r.finished, 0);
+              return (
+                <>
+                  <Insight tone={weekNotStarted ? "warn" : "gold"}>
+                    <b>{num(weekPieces)}</b> pieces are due in the next 7 days: <b>{num(weekDone)}</b> are finished, <b>{num(weekPieces - weekDone - weekVendor - weekNotStarted)}</b> are in our warehouses, <b>{num(weekVendor)}</b> are at outside vendors and <b>{num(weekNotStarted)}</b> have not started yet.
+                  </Insight>
+                  {busiest && busiest.total > 0 && (
+                    <Insight>The busiest day in the next 14 is <b>{busiest.name}</b>, with <b>{plural(busiest.total, "piece")}</b> due.</Insight>
+                  )}
+                  {late.length > 0 && <Insight tone="warn"><b>{num(late.length)}</b> client orders are already past their due date and are not on the calendar ahead; see them under Late Orders.</Insight>}
+                  {noDate.length > 0 && <Insight tone="warn"><b>{num(noDate.length)}</b> client orders have no delivery date, so they cannot be planned.</Insight>}
+                </>
+              );
+            })()}
+          </div>
+        </Card>
         <Card span={12} title="Calendar" sub={`${num(monthTotal)} running orders due in ${MONTHS[month.m]} ${month.y} · ${chName}`}>
           <div className="pmpl-cal-head">
             <button type="button" className="ceo-icon-btn" aria-label="Previous month" onClick={() => shift(-1)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m15 6-6 6 6 6" /></svg></button>

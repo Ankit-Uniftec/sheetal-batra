@@ -7,7 +7,7 @@ import { Pager, num } from "../CeoDashboard/CeoUi";
 import { CsvButton, Stat, defineKit, slug } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
 import {
-  channelOf, clientOf, daysAtStage, daysLeft, dueDay, hasPromise, isLate, isRunning, isUrgent, overdueDays, pieceName, pieceState, plural,
+  atVendor, channelOf, clientOf, daysAtStage, daysLeft, dueDay, hasPromise, isLate, isRunning, isUrgent, overdueDays, pieceName, pieceState, plural,
   productsOf, stageName,
 } from "./pmModel";
 
@@ -68,6 +68,7 @@ export function piecesLine(comps = []) {
   if (!live.length) return "No pieces yet";
   const n = (s) => live.filter((c) => pieceState(c) === s).length;
   const parts = [`${n("finished")} of ${live.length} finished`];
+  if (n("at_wh2")) parts.push(`${n("at_wh2")} at Delhi (2)`);
   if (n("at_vendor")) parts.push(`${n("at_vendor")} at vendor`);
   if (n("not_started")) parts.push(`${n("not_started")} not started`);
   if (n("disposed")) parts.push(`${n("disposed")} disposed`);
@@ -158,14 +159,14 @@ export function OrdersTable({ ctx, orders, title, stats = true, sort = "due", em
 export function PiecesTable({ ctx, pieces, title, stats = true, empty = "No pieces here." }) {
   const [page, setPage] = useState(1);
   const orders = new Set(pieces.map((c) => c.order_id)).size;
-  const vendor = pieces.filter((c) => c.is_outside_wh).length;
+  const vendor = pieces.filter(atVendor).length;
   return (
     <>
       {stats && (
         <div className="ceo-dstats">
           <Stat label="Pieces" info="Garment pieces in this list."><b>{num(pieces.length)}</b></Stat>
           <Stat label="Orders" info="The orders these pieces belong to."><b>{num(orders)}</b></Stat>
-          <Stat label="At Vendors" info="Pieces in this list that are out with a vendor right now."><b>{num(vendor)}</b></Stat>
+          <Stat label="At Vendors" info="Pieces in this list that are out with an outside vendor right now. Our own SB WH Delhi (2) is not a vendor."><b>{num(vendor)}</b></Stat>
         </div>
       )}
       <div className="gm-actions"><CsvButton disabled={!pieces.length} onClick={() => exportPieces(title, pieces, ctx)} /></div>

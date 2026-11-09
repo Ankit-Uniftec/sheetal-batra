@@ -7,7 +7,7 @@ import { Empty, Insight, PageHead, Seg, num } from "../CeoDashboard/CeoUi";
 import { defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
 import { csvFromObjects } from "./PmCommon";
-import { DAY, localDay, pct, plural } from "./pmModel";
+import { DAY, isOwnTrip, localDay, pct, plural } from "./pmModel";
 import { GOLD, StackBars, windowStart } from "./PmQuality";
 
 // ============================================================
@@ -58,12 +58,16 @@ export default function VendorsPage({ ctx }) {
 
   const data = useMemo(() => {
     if (!moves) return null;
+    // Outside vendors only: trips to our own SB WH Delhi (2) are not vendor work.
+    const ownTrips = moves.filter(isOwnTrip);
+    const ownOut = new Set(ownTrips.filter((m) => m.isOut).map((m) => m.component_id)).size;
     const start = period === "all" ? null : windowStart(period);
     const inP = (ts) => !!ts && (!start || new Date(ts) >= start);
-    const outNow = moves.filter((m) => m.isOut);
+    const outside = moves.filter((m) => !isOwnTrip(m));
+    const outNow = outside.filter((m) => m.isOut);
     const overdue = outNow.filter((m) => m.overdue).sort((a, b) => b.daysOverdue - a.daysOverdue);
-    const sent = moves.filter((m) => inP(sentAt(m)));
-    const back = moves.filter((m) => m.status === "returned" && inP(m.entry_scan_at));
+    const sent = outside.filter((m) => inP(sentAt(m)));
+    const back = outside.filter((m) => m.status === "returned" && inP(m.entry_scan_at));
     const timed = back.filter((m) => backOnTime(m) != null);
     const onTime = timed.filter((m) => backOnTime(m));
     const repeats = sent.filter((m) => m.isRepeat);
@@ -102,7 +106,7 @@ export default function VendorsPage({ ctx }) {
 
     // Pieces, not trips: a piece can have more than one open trip on record.
     const distinct = (list) => new Set(list.map((m) => m.component_id || `m${m.id}`)).size;
-    return { outNow, overdue, outPieces: distinct(outNow), overduePieces: distinct(overdue), sent, back, timed, onTime, repeats, vendors, outBars, byStage, used: vendors.filter((v) => v.sent.length).length };
+    return { ownOut, outNow, overdue, outPieces: distinct(outNow), overduePieces: distinct(overdue), sent, back, timed, onTime, repeats, vendors, outBars, byStage, used: vendors.filter((v) => v.sent.length).length };
   }, [moves, period]);
 
   const label = PERIODS.find((p) => p.value === period)?.label;
@@ -124,7 +128,7 @@ export default function VendorsPage({ ctx }) {
       {!data ? <section className="ceo-card"><Empty text={lazy.movements?.error ? `Vendor trips could not be loaded: ${lazy.movements.error}` : "Loading vendor trips…"} /></section> : (
         <>
           <div className="ceo-tiles">
-            <Tile icon="warehouse" label="At Vendors Now" value={num(data.outPieces)} note={`${num(data.outNow.length)} open trips`} onClick={() => openTrips("At Vendors Now", "Out with an outside vendor", data.outNow)} />
+            <Tile icon="warehouse" label="At Vendors Now" value={num(data.outPieces)} note={`Outside vendors · ${num(data.ownOut)} more at our Delhi (2)`} onClick={() => openTrips("At Vendors Now", "Out with an outside vendor", data.outNow)} />
             <Tile icon="alert" tone={data.overdue.length ? "warn" : undefined} label="Overdue at Vendors" value={num(data.overduePieces)} note={`${pct(data.overduePieces, data.outPieces)}% of pieces out`} onClick={() => openTrips("Overdue at Vendors", "Past the return date", data.overdue)} />
             <Tile icon="receive" label="Returned" value={num(data.back.length)} note={label} onClick={() => openTrips("Back from Vendors", label, data.back)} />
             <Tile icon="sale" label="Returned On Time" value={data.timed.length ? `${pct(data.onTime.length, data.timed.length)}%` : "–"} note={`${num(data.onTime.length)} of ${num(data.timed.length)} trips`} onClick={() => openTrips("Back Late", `${label}: came back after the return date`, data.timed.filter((m) => !backOnTime(m)))} />
@@ -132,9 +136,10 @@ export default function VendorsPage({ ctx }) {
           </div>
 
           <div className="ceo-grid">
-            {(data.overdue.length > 0 || data.vendors.length > 0) && (
+            {(
               <Card span={12} title="What This Says">
                 <div className="pmq-insights">
+                  <Insight>This page covers outside vendors only. <b>{num(data.ownOut)}</b> more pieces are at our own SB WH Delhi (2); they count as on the floor (see Floor &amp; Flow).</Insight>
                   {data.overdue.length > 0 && <Insight tone="warn"><b>{plural(data.overdue.length, "piece")}</b> {data.overdue.length === 1 ? "is" : "are"} past the return date; the longest has been overdue for {plural(data.overdue[0].daysOverdue, "day")} at {vendorOf(data.overdue[0])}.</Insight>}
                   {(() => {
                     const worst = data.vendors.filter((v) => v.timed >= 5 && v.onTimePct != null).sort((a, b) => a.onTimePct - b.onTimePct)[0];

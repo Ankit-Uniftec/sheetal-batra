@@ -99,6 +99,26 @@ export const Legend = ({ series }) => (
   <div className="pmq-legend">{series.map((s) => <span key={s.key}><i style={{ background: s.color }} />{s.name}</span>)}</div>
 );
 
+// Fail reasons are typed freely, often in Hinglish and often naming several
+// problems at once ("Kurta front fabric Issue / stain", "Dhoti ki jagah salwar
+// banwa diya"). Each reason is matched to every type of problem it mentions.
+const FAIL_TYPES = [
+  { name: "Wrong item, colour or design", test: /ki jagah|jagah|manga|wrong (colou?r|design|fabric)|made in wrong|wrong ban|bana tha|wrong colour/ },
+  { name: "Embroidery or handwork", test: /embroid|\bemb\b|hand alt|zari|sequin|motif|dabka|gota/ },
+  { name: "Dyeing or colour", test: /d[iy]+[ei]?ing|dyeing|dinging|colou?r (fade|bleed|mismatch)|fade|bleed|mismatch|printing|shade/ },
+  { name: "Stains, marks or dry cleaning", test: /stain|mark|chapa|dry ?clean/ },
+  { name: "Fabric", test: /fabric|febric|fata|line issue|\bsath\b|torn|hole/ },
+  { name: "Measurement or fit", test: /measur|length|waist|hip|bust|mori|crotch|neck depth|neckline|armhole|bicep|size|lous|losing|lehenga issue|\d+(\.\d+)?\s*-\s*\(?\d/ },
+];
+/** Every type of problem a fail reason mentions ("Other" when none is recognised). */
+export const failTypes = (reason) => {
+  const r = String(reason || "").toLowerCase();
+  if (!r.trim()) return ["No reason given"];
+  const hits = FAIL_TYPES.filter((t) => t.test.test(r)).map((t) => t.name);
+  return hits.length ? hits : ["Other"];
+};
+const pct1 = (a, b) => (b ? (Math.round((a / b) * 1000) / 10).toLocaleString("en-IN") : "0");
+
 const inspected = (r) => r.is_override !== true;
 const failed = (r) => inspected(r) && r.result === "fail";
 
@@ -151,6 +171,9 @@ export default function QualityPage({ ctx }) {
       return Object.values(m).sort((a, b) => b.value - a.value);
     };
     const reasons = group(fails, (r) => (r.fail_reason || "").trim() || "Not given");
+    const typeMap = {};
+    fails.forEach((r) => failTypes(r.fail_reason).forEach((k) => { (typeMap[k] || (typeMap[k] = { name: k, value: 0, rows: [] })).rows.push(r); typeMap[k].value += 1; }));
+    const types = Object.values(typeMap).sort((a, b) => (a.name === "Other") - (b.name === "Other") || b.value - a.value);
     const backTo = group(fails.filter((r) => r.rejourney_to_stage), (r) => getStageLabel(r.rejourney_to_stage).replace(/ In-Progress$/, ""));
     const qcPoints = ["qc1", "final"].map((k) => {
       const c = checks.filter((r) => (r.which_qc === "final" ? "final" : "qc1") === k);
@@ -164,7 +187,7 @@ export default function QualityPage({ ctx }) {
     const repeat = group(fails.filter((r) => r.component_id), (r) => r.component_id)
       .filter((g) => g.value > 1)
       .map((g) => ({ id: g.name, count: g.value, rows: g.rows, piece: piecesById[g.name], order_id: g.rows[0].order_id, order_no: g.rows[0].order_no, barcode: g.rows[0].barcode, reasons: [...new Set(g.rows.map((r) => (r.fail_reason || "").trim()).filter(Boolean))] }));
-    return { rows, checks, fails, rework, disposed, overrides, rate, prevRate, buckets, reasons, backTo, qcPoints, inspectors, repeat, step };
+    return { rows, checks, fails, rework, disposed, overrides, rate, prevRate, buckets, reasons, types, backTo, qcPoints, inspectors, repeat, step };
   }, [all, period, piecesById]);
 
   const label = PERIODS.find((p) => p.value === period)?.label;
@@ -194,9 +217,15 @@ export default function QualityPage({ ctx }) {
                     <b>{data.rate.toFixed(1)}%</b> of {plural(data.checks.length, "check")} passed{data.prevRate != null ? `, against ${data.prevRate.toFixed(1)}% in the ${period} days before` : ""}.
                   </Insight>
                 )}
-                {data.reasons[0] && (
-                  <Insight tone="warn">The most common reason for failing is <b>{data.reasons[0].name}</b>: {plural(data.reasons[0].value, "failure")}, {pct(data.reasons[0].value, data.fails.length)}% of all failures.</Insight>
+                {data.types[0] && data.types[0].name !== "Other" && (
+                  <Insight tone="warn">The most common problem is <b>{data.types[0].name.toLowerCase()}</b>: {num(data.types[0].value)} of {plural(data.fails.length, "failure")} mention it.{data.types[1] && data.types[1].name !== "Other" ? <> Next is {data.types[1].name.toLowerCase()} ({num(data.types[1].value)}).</> : null}</Insight>
                 )}
+                {(() => {
+                  const list = data.inspectors.filter((r) => r.value >= 20).sort((a, b) => b.fails.length / b.value - a.fails.length / a.value);
+                  return list.length > 1 && list[0].fails.length > 0
+                    ? <Insight><b>{list[0].name}</b> fails the most pieces: {pct1(list[0].fails.length, list[0].value)}% of {num(list[0].value)} checks, against {pct1(data.fails.length, data.checks.length)}% overall.</Insight>
+                    : null;
+                })()}
                 {data.backTo[0] && <Insight>Failed pieces most often go back to <b>{data.backTo[0].name}</b> ({plural(data.backTo[0].value, "time")}).</Insight>}
                 {data.repeat.length > 0 && <Insight tone="warn"><b>{plural(data.repeat.length, "piece")}</b> failed QC more than once; they are listed below.</Insight>}
                 {data.overrides.length > 0 && <Insight><b>{plural(data.overrides.length, "piece")}</b> {data.overrides.length === 1 ? "was" : "were"} completed without passing Final QC.</Insight>}
@@ -217,7 +246,12 @@ export default function QualityPage({ ctx }) {
               <div className="pmq-rates">{data.qcPoints.map((q) => <span key={q.name}><small>{q.name} pass rate</small><b>{q.passed + q.failed ? `${pct(q.passed, q.passed + q.failed)}%` : "–"}</b></span>)}</div>
             </Card>
 
-            <Card span={6} md={12} title="Why Pieces Fail" sub="Click a reason to see its pieces">
+            <Card span={12} title="Failure Types" sub="What each fail reason mentions; one failure can mention more than one problem. Click a type to see its pieces.">
+              <RankBars rows={data.types} limit={8} format={(v) => plural(v, "failure")} sub={(r) => `Mentioned in ${pct(r.value, data.fails.length)}% of failures`}
+                onRow={(r) => openRows(`Failed: ${r.name}`, label, r.rows)} />
+            </Card>
+
+            <Card span={6} md={12} title="Why Pieces Fail" sub="The reasons as written. Click one to see its pieces">
               <RankBars rows={data.reasons} limit={10} format={(v) => plural(v, "failure")} sub={(r) => `${pct(r.value, data.fails.length)}% of failures`}
                 onRow={(r) => openRows(`Failed: ${r.name}`, label, r.rows)} />
             </Card>
@@ -232,7 +266,7 @@ export default function QualityPage({ ctx }) {
                 { key: "name", label: "Inspector", render: (r) => <span className="pm-cell"><b>{r.name}</b></span> },
                 { key: "checks", label: "Checks", right: true, render: (r) => num(r.value) },
                 { key: "fails", label: "Failed", right: true, render: (r) => num(r.fails.length) },
-                { key: "pct", label: "Fail Rate", right: true, render: (r) => `${r.failPct}%` },
+                { key: "pct", label: "Fail Rate", right: true, render: (r) => `${pct1(r.fails.length, r.value)}%` },
               ]} />
               {data.inspectors.length > 0 && (
                 <button type="button" className="ceo-link pm-more" onClick={() => csvFromObjects(`qc inspectors ${label}`, data.inspectors.map((r) => ({ Inspector: r.name, Checks: r.value, Failed: r.fails.length, "Fail Rate %": r.failPct })))}>Export CSV</button>

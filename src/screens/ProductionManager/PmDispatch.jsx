@@ -5,7 +5,7 @@ import { Empty, Insight, PageHead, Pager, Seg, num } from "../CeoDashboard/CeoUi
 import { defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
 import { DueCell, OrderCell, exportOrders } from "./PmCommon";
-import { DAY, channelOf, hasPromise, localDay, pct, plural, statusOf, todayStart } from "./pmModel";
+import { DAY, channelOf, hasPromise, localDay, pct, plural, readyToDispatch, todayStart } from "./pmModel";
 import { GOLD, StackBars, windowStart } from "./PmQuality";
 
 // ============================================================
@@ -34,8 +34,6 @@ const LOCAL_CARDS = {
 const { Tile, Card, Table } = defineKit({ tiles: { ...TILE_INFO, ...LOCAL_TILES }, cards: { ...CARD_INFO, ...LOCAL_CARDS }, columns: COLUMN_INFO });
 
 const PERIODS = [{ value: "7", label: "Last 7 Days" }, { value: "30", label: "Last 30 Days" }, { value: "90", label: "Last 90 Days" }];
-const READY = new Set(["final_qc_passed", "production_complete", "packaging_dispatch"]);
-const GONE = new Set(["dispatched", "delivered", "cancelled", "revoked", "returned", "exchange_return"]);
 const PAGE = 10;
 
 /** Days the client got it before (negative) or after (positive) the promised date. */
@@ -64,17 +62,8 @@ export default function DispatchPage({ ctx }) {
     const now = Date.now();
     const inP = (ts) => !!ts && new Date(ts) >= start;
 
-    // Ready to dispatch: every live piece is finished (or already sent), at least one is waiting.
-    const ready = [];
-    orders.forEach((o) => {
-      if (GONE.has(statusOf(o)) || o.warehouse_stage === "dispatched") return;
-      const live = (componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at && c.current_stage !== "disposed" && c.current_stage !== "scrapped");
-      const waiting = live.filter((c) => READY.has(c.current_stage));
-      if (!waiting.length || !live.every((c) => READY.has(c.current_stage) || c.current_stage === "dispatched")) return;
-      const since = Math.max(...waiting.map((c) => new Date(c.stage_updated_at || o.updated_at || o.created_at).getTime()));
-      ready.push({ o, since, waitDays: Math.floor((now - since) / DAY), partial: live.some((c) => c.current_stage === "dispatched") });
-    });
-    ready.sort((a, b) => a.since - b.since);
+    // Ready to dispatch: the shared rule (pmModel.readyToDispatch), so Today and this page agree.
+    const ready = readyToDispatch(orders, componentsByOrder, now);
     const stale = ready.filter((r) => r.waitDays >= 2);
 
     const dispatched = Object.keys(firstOut).filter((id) => inP(firstOut[id])).map((id) => ordersById[id]).filter(Boolean);
