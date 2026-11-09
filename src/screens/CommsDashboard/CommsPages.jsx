@@ -39,7 +39,9 @@ const daysBetween = (from, to) => Math.round((new Date(`${to}T00:00:00`) - new D
 export const ENGAGEMENTS = ["Barter", "Gifting", "Sourcing", "Personal order"];
 const TONES = { Barter: "blue", Gifting: "ok", Sourcing: "warn", "Personal order": "plum" };
 export const engagementTone = (t) => TONES[t] || "gold";
-const ENGAGEMENT_COLOURS = { Barter: "#2f6f73", Gifting: "#8a9a5b", Sourcing: "#c9785a", "Personal order": "#7b3a5e" };
+// The brand gold, deep to light: one shade per engagement type, used by every
+// chart and label on this dashboard.
+export const ENGAGEMENT_COLOURS = { Barter: "#6a4f0c", Gifting: "#a9821f", Sourcing: "#cfae4e", "Personal order": "#e6d18f" };
 
 /** The outfit's full price: each piece's price × quantity plus its extras (as before). */
 export const notionalOf = (o) => (o.items || []).reduce((sum, it) => {
@@ -184,7 +186,7 @@ export function OverviewPage({ ctx }) {
         <AttentionCard ctx={ctx} />
         <TrendCard ctx={ctx} />
         <Card span={5} title="Orders by Engagement" sub="Click a type to see its orders">
-          <Donut data={data.byEng} money={false} center={num(data.placed.length)} sub="orders" onPick={(d) => { const g = data.byEng.find((x) => x.name === d.name); if (g) openOrders({ title: g.name, sub: periodName, orders: g.list }); }} />
+          <Donut data={data.byEng} money={false} colorOf={(r) => ENGAGEMENT_COLOURS[r.name]} center={num(data.placed.length)} sub="orders" onPick={(d) => { const g = data.byEng.find((x) => x.name === d.name); if (g) openOrders({ title: g.name, sub: periodName, orders: g.list }); }} />
           <RankBars rows={data.byEng} format={(v) => ordersN(v)} colorOf={(r) => ENGAGEMENT_COLOURS[r.name]} sub={(r) => `${shortInr(r.notional)} notional`} onRow={(r) => openOrders({ title: r.name, sub: periodName, orders: r.list })} />
         </Card>
         <RecipientsCard ctx={ctx} placed={data.placed} />

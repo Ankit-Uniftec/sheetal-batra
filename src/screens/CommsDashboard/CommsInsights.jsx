@@ -23,7 +23,8 @@ const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${two(
 const dateOnly = (v) => String(v || "").slice(0, 10);
 const ordersN = (n) => `${num(n)} ${Number(n) === 1 ? "order" : "orders"}`;
 const ENGAGEMENTS = ["Barter", "Gifting", "Sourcing", "Personal order"];
-const ENG_COLOURS = { Barter: "#2f6f73", Gifting: "#8a9a5b", Sourcing: "#c9785a", "Personal order": "#7b3a5e" };
+// Same brand-gold shades as the rest of the dashboard (CommsPages ENGAGEMENT_COLOURS).
+const ENG_COLOURS = { Barter: "#6a4f0c", Gifting: "#a9821f", Sourcing: "#cfae4e", "Personal order": "#e6d18f" };
 const isLive = (o) => o.approval_status !== "rejected" && String(o.status || "").toLowerCase() !== "cancelled";
 const DONE = ["completed", "delivered", "dispatched"];
 
@@ -87,27 +88,31 @@ export function AttentionCard({ ctx }) {
     const endedBlocks = blocks.filter((b) => b.end_date < today);
     const eventsToday = events.filter((e) => e.event_date === today);
     return [
-      { key: "overdue", label: "Sourcing outfits past their return date", count: overdue.length, tone: "crit", open: () => openOrders({ title: "Overdue Sourcing Returns", sub: "Past the return date, not marked returned", orders: overdue }) },
-      { key: "late", label: "Orders past their delivery date, still in production", count: late.length, tone: "crit", open: () => openOrders({ title: "Past Delivery Date", sub: "Still in production after the promised date", orders: late }) },
-      { key: "nopr", label: "Completed orders with no PR record yet", count: noPr.length, tone: "warn", open: () => openOrders({ title: "PR Record Missing", sub: "Completed barter, gifting and sourcing orders", orders: noPr }) },
-      { key: "repeat", label: "Same design sent to the same person more than once", count: repeats.length, tone: "warn", open: () => openOrders({ title: "Same Design, Same Person", sub: repeats.map((g) => `${g.who}: ${g.design}`).join(" · "), orders: repeatOrders }) },
-      { key: "today", label: "Deliveries due today", count: dueToday.length, tone: "gold", open: () => openOrders({ title: "Deliveries Due Today", sub: formatDate(today), orders: dueToday }) },
-      { key: "events", label: "Your calendar events today", count: eventsToday.length, tone: "gold", open: () => go("calendar") },
-      { key: "blocks", label: "Blocks that ended but were never released", count: endedBlocks.length, tone: "warn", open: () => go("inventory") },
+      { key: "overdue", icon: "receive", label: "Sourcing outfits past their return date", count: overdue.length, tone: "crit", open: () => openOrders({ title: "Overdue Sourcing Returns", sub: "Past the return date, not marked returned", orders: overdue }) },
+      { key: "late", icon: "orders", label: "Orders past their delivery date, still in production", count: late.length, tone: "crit", open: () => openOrders({ title: "Past Delivery Date", sub: "Still in production after the promised date", orders: late }) },
+      { key: "nopr", icon: "trend", label: "Completed orders with no PR record yet", count: noPr.length, tone: "warn", open: () => openOrders({ title: "PR Record Missing", sub: "Completed barter, gifting and sourcing orders", orders: noPr }) },
+      { key: "repeat", icon: "refresh", label: "Same design sent to the same person more than once", count: repeats.length, tone: "warn", open: () => openOrders({ title: "Same Design, Same Person", sub: repeats.map((g) => `${g.who}: ${g.design}`).join(" · "), orders: repeatOrders }) },
+      { key: "today", icon: "transfer", label: "Deliveries due today", count: dueToday.length, tone: "gold", open: () => openOrders({ title: "Deliveries Due Today", sub: formatDate(today), orders: dueToday }) },
+      { key: "events", icon: "bell", label: "Your calendar events today", count: eventsToday.length, tone: "gold", cta: "Open calendar", open: () => go("calendar") },
+      { key: "blocks", icon: "pin", label: "Blocks that ended but were never released", count: endedBlocks.length, tone: "warn", cta: "Open inventory", open: () => go("inventory") },
     ];
   }, [orders, prRecords, blocks, events, openOrders, go]);
   const shown = items.filter((i) => i.count > 0);
+  const urgent = shown.filter((i) => i.tone === "crit").length;
 
   return (
-    <Card span={12} title="Needs Your Attention" sub={shown.length ? "Click a line to see the orders" : undefined}>
+    <Card span={12} title="Needs Your Attention" sub={shown.length ? `${num(shown.length)} ${shown.length === 1 ? "thing" : "things"} to look at${urgent ? `, ${num(urgent)} to act on now` : ""}. Click one to see the orders.` : undefined}>
       {!shown.length ? <Empty text="Nothing needs your attention right now." /> : (
-        <div className="comms-attention">
+        <div className="comms-actions">
           {shown.map((i) => (
-            <button key={i.key} type="button" className="comms-attn" onClick={i.open}>
-              <b className="comms-attn-num">{num(i.count)}</b>
-              <span className="comms-attn-text">{i.label}</span>
-              <i className={`comms-attn-tag is-${i.tone}`}>{TAG[i.tone]}</i>
-              <Icon name="chevron" />
+            <button key={i.key} type="button" className="comms-action" onClick={i.open}>
+              <span className="comms-action-top">
+                <span className={`comms-action-ico is-${i.tone}`}><Icon name={i.icon} /></span>
+                <span className="comms-action-when">{TAG[i.tone]}</span>
+              </span>
+              <b className="comms-action-num">{num(i.count)}</b>
+              <span className="comms-action-text">{i.label}</span>
+              <span className="comms-action-go">{i.cta || "View orders"}<Icon name="chevron" /></span>
             </button>
           ))}
         </div>

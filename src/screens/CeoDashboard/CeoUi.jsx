@@ -213,7 +213,7 @@ export function TrendChart({ data, height = 280, onPick }) {
   );
 }
 
-export function Donut({ data, center, sub, height = 220, valueKey = "value", money = true, onPick }) {
+export function Donut({ data, center, sub, height = 220, valueKey = "value", money = true, onPick, colorOf }) {
   const rows = (data || []).filter((d) => Number(d[valueKey]) > 0);
   if (!rows.length) return <Empty />;
   return (
@@ -222,7 +222,7 @@ export function Donut({ data, center, sub, height = 220, valueKey = "value", mon
         <PieChart>
           <Pie data={rows} dataKey={valueKey} nameKey="name" innerRadius="66%" outerRadius="96%" paddingAngle={2} stroke="none" isAnimationActive={false}
             onClick={onPick ? (d) => onPick(d.payload?.payload || d) : undefined} style={onPick ? { cursor: "pointer" } : undefined}>
-            {rows.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+            {rows.map((r, i) => <Cell key={i} fill={(colorOf && colorOf(r)) || PALETTE[i % PALETTE.length]} />)}
           </Pie>
           <Tooltip content={<ChartTip money={money} />} />
         </PieChart>
