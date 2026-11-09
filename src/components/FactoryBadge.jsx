@@ -1,4 +1,5 @@
 import React from "react";
+import "./ComponentStageBadge.css";
 import { factoryBadge, WH2 } from "../utils/factory2";
 
 /**
@@ -13,11 +14,7 @@ export default function FactoryBadge({ factory, look }) {
   const two = factory === WH2;
   // The brand look: a quiet neutral tag (the older dashboards keep blue / purple).
   if (look === "brand") {
-    return (
-      <span style={{ display: "inline-block", marginLeft: 6, padding: "1px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap", background: two ? "#efe3bf" : "#f6efdf", color: "#6a4f0c" }}>
-        {text}
-      </span>
-    );
+    return <span className={`sb-wh-tag${two ? " is-two" : ""}`}>{text}</span>;
   }
   return (
     <span

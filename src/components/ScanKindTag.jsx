@@ -1,4 +1,5 @@
 import React from "react";
+import "./ComponentStageBadge.css";
 
 // Small pill that labels a timeline entry as an INTERNAL production scan
 // (green) or an EXTERNAL / vendor movement (orange). Shared by every timeline
@@ -8,11 +9,8 @@ import React from "react";
 export default function ScanKindTag({ kind, look }) {
   const external = kind === "external";
   if (look === "brand") {
-    return (
-      <span style={{ display: "inline-block", fontSize: "10.5px", fontWeight: 600, lineHeight: 1, letterSpacing: "0.03em", padding: "4px 8px", borderRadius: "999px", textTransform: "uppercase", whiteSpace: "nowrap", color: external ? "#8a4b22" : "#7e5f10", backgroundColor: external ? "#f9e7d9" : "#fbf4e0" }}>
-        {external ? "External / Vendor" : "Internal Scan"}
-      </span>
-    );
+    // Classes (in ComponentStageBadge.css), so the colours hold against the app-wide text rule.
+    return <span className={`sb-kind-tag ${external ? "is-external" : "is-internal"}`}>{external ? "External / Vendor" : "Internal Scan"}</span>;
   }
   const style = {
     display: "inline-block",

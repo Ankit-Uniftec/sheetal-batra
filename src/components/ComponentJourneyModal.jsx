@@ -210,6 +210,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
   const [halfMade, setHalfMade] = useState(null);   // { mode: "move" | "use", component }
   const [reloadKey, setReloadKey] = useState(0);
   const [newestFirst, setNewestFirst] = useState(true);
+  const [view, setView] = useState("journey"); // the tab shown for the chosen piece: journey | trips | scans
   useEffect(() => { fetchMyRole().then(setMe).catch(() => {}); }, []);
 
   useEffect(() => {
@@ -467,11 +468,20 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                       {/* The journey line: every stage in order as a node on one
                           line, saying whether it is done (with the date and the
                           time spent), where the piece is now, not needed, or to come. */}
-                      <section className="cjm-section cjm-journey">
+                      {/* Tabs: the journey, the vendor trips and the scan history each get the full width */}
+                      <div className="cjm-tabs" role="tablist">
+                        {[["journey", "Journey", null], ["trips", "Vendor Trips", movements.length], ["scans", "Scan History", transitions.length]].map(([k, label, n]) => (
+                          <button key={k} type="button" role="tab" aria-selected={view === k} className={`cjm-tab${view === k ? " is-on" : ""}`} onClick={() => setView(k)}>
+                            {label}{n != null && <b>{n}</b>}
+                          </button>
+                        ))}
+                      </div>
+
+                      {view === "journey" && <section className="cjm-section cjm-journey">
                         <div className="cjm-section-row">
                           <p className="cjm-section-title">Journey</p>
                           <span className="cjm-legend">
-                            <span><i className="is-done" />Done</span><span><i className="is-current" />Now</span><span><i className="is-skipped" />Skipped</span><span><i className="is-todo" />To come</span>
+                            <span><i className="is-done" />Done</span><span><i className="is-current" />Now</span><span><i className="is-skipped" />Skipped</span><span><i className="is-todo" />Upcoming</span>
                           </span>
                         </div>
                         {(() => {
@@ -488,7 +498,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                             const finished = state === "current" && st.done;
                             const info = stats[i];
                             const word = state === "current" ? (finished ? "Finished" : c.is_outside_wh ? "At vendor" : "Now")
-                              : state === "done" ? "Done" : state === "skipped" ? "Skipped" : isNext ? "Up next" : "To come";
+                              : state === "done" ? "Done" : state === "skipped" ? "Skipped" : isNext ? "Up next" : "Upcoming";
                             const when = info?.firstAt ? shortDate(info.firstAt) : "";
                             const spent = state === "current" && !finished
                               ? (st.notStarted ? "Waiting to start" : info?.ms >= 60000 ? `Here ${fmtSpan(info.ms)}` : "Just arrived")
@@ -501,9 +511,10 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                               <ol className="cjm-track" style={{ "--steps": STEP_LIST.length }}>
                                 {nodes.map((n) => (
                                   <li key={n.g.key} className={`cjm-node is-${n.state}${n.isNext ? " is-next" : ""}${n.finished ? " is-finished" : ""}`} title={`${n.g.label}: ${n.word}`}>
-                                    {n.state === "current" && <span className="cjm-node-now">{n.word}</span>}
+                                    <span className="cjm-node-label">
+                                      <span className="cjm-node-name">{SHORT_STEP[n.g.label] || n.g.label}</span>
+                                    </span>
                                     <span className="cjm-node-dot">{n.state === "done" || n.finished ? "✓" : n.state === "skipped" ? "–" : n.i + 1}</span>
-                                    <span className="cjm-node-name">{SHORT_STEP[n.g.label] || n.g.label}</span>
                                     {/* shown only when the line is vertical (small screens) */}
                                     <span className="cjm-node-word">{n.word}</span>
                                     {(n.when || n.spent) && <span className="cjm-node-foot">{[n.when, n.spent].filter(Boolean).join(" · ")}</span>}
@@ -527,10 +538,11 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                             </>
                           );
                         })()}
-                      </section>
+                      </section>}
 
                       {/* Vendor trips — every time this piece left the warehouse */}
-                      {movements.length > 0 && (
+                      {view === "trips" && movements.length === 0 && <p className="cjm-empty-inline cjm-tab-empty">This piece has not been sent to a vendor.</p>}
+                      {view === "trips" && movements.length > 0 && (
                         <section className="cjm-section">
                           <p className="cjm-section-title">Vendor Trips</p>
                           <div className="cjm-trips">
@@ -574,7 +586,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                         </section>
                       )}
 
-                      <section className="cjm-section">
+                      {view === "scans" && <section className="cjm-section">
                         <div className="cjm-section-row">
                           <p className="cjm-section-title">Scan History</p>
                           {transitions.length > 1 && (
@@ -630,7 +642,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                             </div>
                           ))
                         )}
-                      </section>
+                      </section>}
                     </>
                   );
                 })()}
