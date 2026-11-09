@@ -268,3 +268,7 @@
 .ceo.pm .pmf-says { margin: 0 0 18px; }
 .ceo.pm .pm-floor-legend i.is-wh2, .ceo.pm .pm-floor-seg.is-wh2 { background: #6a4f0c; }
 .ceo.pm .pm-floor-seg.is-wh2 span { color: #fff !important; }
+
+/* ---------- Stock ---------- */
+.ceo.pm .pms-photo { margin: 0 0 14px; }
+.ceo.pm .pms-photo img { width: 100%; max-height: 320px; object-fit: contain; border-radius: 12px; background: #faf7ef; }

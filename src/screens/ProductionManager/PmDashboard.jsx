@@ -19,6 +19,8 @@ import { fetchFullOrder, PM_ORDER_SELECT } from "../../utils/pmOrderColumns";
 import { fetchExternalMovements } from "../../utils/externalMovements";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import { fetchReJourneys } from "../../utils/reJourneys";
+import { listHalfMade } from "../../utils/halfMade";
+import { loadLedger, loadSales, loadStockOrders, loadStockRoomCatalogue } from "../StockRoom/stockRoomData";
 import { getStagesOutsideLabel } from "../../utils/barcodeService";
 import Logo from "../../images/logo.png";
 import { CalendarIcon, Drawer, GlobalSearch, Icon, MenuIcon, Thumb, num } from "../CeoDashboard/CeoUi";
@@ -41,7 +43,8 @@ import VendorsPage from "./PmVendors";
 import DispatchPage from "./PmDispatch";
 import PeoplePage from "./PmPeople";
 import ApprovalsPage from "./PmApprovals";
-import { CancellationsPage, ProfilePage, StockPage } from "./PmMore";
+import { CancellationsPage, ProfilePage } from "./PmMore";
+import StockPage from "./PmStock";
 
 // ============================================================
 // Production Manager dashboard. Everything the old dashboard did, in the
@@ -98,6 +101,14 @@ const LOADERS = {
   waiting: () => loadWaiting(),
   qcAll: () => fetchQcRecords({ paged: true }),
   rejourneys: () => fetchReJourneys({ paged: true }),
+  // Stock Room's own loaders, so the Stock page counts exactly what Stock Room counts.
+  stockRoom: async () => {
+    const [catalogue, stockOrders, ledger, recentOrders] = await Promise.all([
+      loadStockRoomCatalogue(), loadStockOrders(), loadLedger().catch(() => ({ installed: false })), loadSales(90),
+    ]);
+    return { data: { ...catalogue, stockOrders, recentOrders, ordersReady: true, salesReady: true }, ledger };
+  },
+  halfMade: () => listHalfMade(),
 };
 
 export default function PmDashboard() {

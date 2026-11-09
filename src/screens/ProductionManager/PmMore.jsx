@@ -1,12 +1,10 @@
 import React from "react";
 import CancellationsPanel from "../../components/CancellationsPanel";
-import StockPanel from "../../components/stock/StockPanel";
-import { poolsForUser } from "../../utils/stockVisibility";
 import { PageHead } from "../CeoDashboard/CeoUi";
 
 // ============================================================
-// Cancellations, Stock and Profile. The panels are the shared ones (the COO
-// and Production Head use them too); money is switched off for production.
+// Cancellations and Profile. The Cancellations panel is the shared one (the
+// COO uses it too); money is switched off for production. Stock is PmStock.jsx.
 // ============================================================
 
 export function CancellationsPage() {
@@ -14,15 +12,6 @@ export function CancellationsPage() {
     <div className="ceo-page">
       <PageHead title="Cancellations" desc="Orders cancelled, why, and at which stage the pieces were when they came off the floor." />
       <section className="ceo-card pm-classic ceo-keep"><CancellationsPanel hideMoney /></section>
-    </div>
-  );
-}
-
-export function StockPage() {
-  return (
-    <div className="ceo-page">
-      <PageHead title="Stock" desc="Finished stock the floor can draw on, by pool." />
-      <section className="ceo-card pm-classic ceo-keep"><StockPanel pools={poolsForUser({ role: "production_manager" })} /></section>
     </div>
   );
 }

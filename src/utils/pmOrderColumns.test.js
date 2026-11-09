@@ -25,6 +25,7 @@ const SCANNED_FILES = [
   "src/screens/ProductionManager/PmVendors.jsx", "src/screens/ProductionManager/PmDispatch.jsx",
   "src/screens/ProductionManager/PmPeople.jsx", "src/screens/ProductionManager/PmApprovals.jsx",
   "src/screens/ProductionManager/PmMore.jsx", "src/screens/ProductionManager/PmBriefing.jsx",
+  "src/screens/ProductionManager/PmStock.jsx",
 ];
 
 // Named in those files but deliberately NOT loaded (only mentioned in comments
