@@ -183,9 +183,20 @@ export function TopSellers({ ctx, span = 12 }) {
               <h4>Top 6 Colours</h4>
               <RankBars rows={data.colours} limit={6} format={pcs} sub={(r) => plural(r.list.length, "order")} onRow={open("Colour")} />
             </div>
-            <div className="pm-sales-col">
+            <div className="pm-sales-col is-sizes">
               <h4>Sizes</h4>
-              <RankBars rows={data.sizes} limit={data.sizes.length} format={pcs} sub={(r) => plural(r.list.length, "order")} onRow={open("Size")} />
+              <div className="pm-size-grid">
+                {(() => {
+                  const max = Math.max(...data.sizes.map((r) => r.value), 1);
+                  return data.sizes.map((r) => (
+                    <button key={r.name} type="button" className="pm-size-tile" onClick={() => open("Size")(r)} title={`${pcs(r.value)} in ${plural(r.list.length, "order")}`}>
+                      <b>{r.name}</b>
+                      <span>{num(r.value)} pcs</span>
+                      <i><em style={{ width: `${(r.value / max) * 100}%` }} /></i>
+                    </button>
+                  ));
+                })()}
+              </div>
             </div>
           </div>
         </>

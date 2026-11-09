@@ -18,3 +18,24 @@
 .ceo.pm .pm-sales-col { min-width: 0; }
 @media (max-width: 900px) { .ceo.pm .pm-sales-grid { grid-template-columns: minmax(0, 1fr); } }
 .ceo.pm .pm-sales-col .ceo-rank-name, .ceo.pm .pm-sales-col b { overflow-wrap: anywhere; }
+
+/* Top Sellers: sizes as a compact tile grid so the column ends level with Products and Colours. */
+.ceo.pm .pm-size-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.ceo.pm .pm-size-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 10px; font: inherit; text-align: left; cursor: pointer; border: 1px solid #ece5d2 !important; border-radius: 10px; background: #fffdf8 !important; }
+.ceo.pm .pm-size-tile:hover, .ceo.pm .pm-size-tile:focus-visible { border-color: #c9a23e !important; }
+.ceo.pm .pm-size-tile b { font-size: 13px; font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pm-size-tile span { font-size: 11.5px; color: #6a4f0c !important; }
+.ceo.pm .pm-size-tile i { display: block; width: 100%; height: 4px; border-radius: 99px; background: #f3ecd9 !important; overflow: hidden; }
+.ceo.pm .pm-size-tile em { display: block; height: 100%; border-radius: 99px; background: #c9a23e !important; }
+
+/* Top Sellers: Products and Colours side by side, Sizes across the full width below. */
+.ceo.pm .pm-sales-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ceo.pm .pm-sales-col.is-sizes { grid-column: 1 / -1; padding-top: 18px; border-top: 1px solid #f1ebdc; }
+.ceo.pm .pm-sales-col.is-sizes .pm-size-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+@media (max-width: 900px) { .ceo.pm .pm-sales-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .ceo.pm .pm-sales-col.is-sizes .pm-size-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .ceo.pm .pm-size-tile { padding: 6px 7px; }
+  .ceo.pm .pm-size-tile b { font-size: 12px; overflow-wrap: anywhere; }
+  .ceo.pm .pm-size-tile span { font-size: 10.5px; }
+}

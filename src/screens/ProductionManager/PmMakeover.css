@@ -929,3 +929,9 @@
 
 /* QC Inspectors: a summary above the bars, so the card sits level with Manual Moves. */
 .ceo.pm .pm-qc-sum { margin-bottom: 14px; }
+
+/* A chart that ends its card grows to the card's height, so it sits level with a longer
+   list beside it instead of leaving a blank space under the chart. Never shorter than set. */
+.ceo.pm .ceo-grid > .ceo-card:has(> .ceo-chart-scroll:last-child) { display: flex; flex-direction: column; }
+.ceo.pm .ceo-grid > .ceo-card > .ceo-chart-scroll:last-child { flex: 1 1 auto; display: flex; flex-direction: column; }
+.ceo.pm .ceo-grid > .ceo-card > .ceo-chart-scroll:last-child > div { flex: 1 1 auto; height: auto !important; min-height: 250px; }
