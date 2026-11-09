@@ -199,6 +199,17 @@ export const barValueLabel = (format = num) => ({ x, y, width, value }) => (
     ? <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={LABEL_INK} pointerEvents="none">{format(value)}</text>
     : null
 );
+/** Bar labels when there are too many bars for every number to fit: the highest
+ *  and the latest bar still show theirs (the same rule as point labels). */
+export const sparseBarLabel = (data, valueKey, format = num) => {
+  const vals = (data || []).map((d) => Number(d[valueKey]) || 0);
+  const maxIdx = vals.indexOf(Math.max(...vals));
+  const last = vals.length - 1;
+  return ({ x, y, width, value, index }) => {
+    if (!value || (index !== maxIdx && index !== last)) return null;
+    return <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={LABEL_INK} pointerEvents="none">{format(value)}</text>;
+  };
+};
 /** Point labels on a line: every point up to 12, otherwise the highest and the latest. */
 export const pointValueLabel = (data, valueKey, format = num) => {
   const vals = (data || []).map((d) => Number(d[valueKey]) || 0);
@@ -319,7 +330,7 @@ export function Columns({ data, valueKey = "value", labelKey = "name", name = "R
           <Tooltip content={<ChartTip money={money} />} cursor={{ fill: "rgba(184,146,46,.07)" }} />
           <Bar dataKey={valueKey} name={name} radius={[6, 6, 0, 0]} maxBarSize={44} isAnimationActive={false}>
             {data.map((d, i) => <Cell key={i} fill={highlight && highlight(d) ? "#a9821f" : "#e4d3a0"} />)}
-            <LabelList dataKey={valueKey} content={barValueLabel(money ? shortInr : num)} />
+            <LabelList dataKey={valueKey} content={data.length > 16 ? sparseBarLabel(data, valueKey, money ? shortInr : num) : barValueLabel(money ? shortInr : num)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -709,7 +720,8 @@ export function FilterButton({ count = 0, onClick, label = "Filters" }) {
 const norm = (s) => String(s || "").toLowerCase();
 
 /** Find anything from one box: a page, an order, a client or a design. Press / to jump to it. */
-export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder, onClient, onDesign }) {
+/** `extra`: more things to find, each { key, kind, label, meta, text, go } (for example piece barcodes). */
+export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder, onClient, onDesign, extra, placeholder = "Search orders, clients or designs" }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const box = useRef(null);
@@ -739,8 +751,9 @@ export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder
       .forEach((c) => out.push({ key: `c${c.phone}`, kind: "Client", label: c.name, meta: shortInr(c.totalSpend), go: () => onClient(c) }));
     (products || []).filter((p) => norm(p.name).includes(t) || norm(p.sku_id).includes(t)).slice(0, 4)
       .forEach((p) => out.push({ key: `d${p.id}`, kind: "Design", label: p.name, meta: p.sku_id || "", go: () => onDesign(p) }));
+    (extra || []).filter((x) => norm(x.text).includes(t)).slice(0, 4).forEach((x) => out.push(x));
     return out;
-  }, [q, pages, orders, products, clients, onPage, onOrder, onClient, onDesign]);
+  }, [q, pages, orders, products, clients, onPage, onOrder, onClient, onDesign, extra]);
 
   return (
     <div className="ceo-global" ref={box}>
@@ -750,7 +763,7 @@ export function GlobalSearch({ pages, orders, products, clients, onPage, onOrder
           ref={input}
           type="text"
           value={q}
-          placeholder="Search orders, clients or designs"
+          placeholder={placeholder}
           aria-label="Find an order, client, design or page"
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}

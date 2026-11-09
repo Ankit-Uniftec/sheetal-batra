@@ -34,7 +34,8 @@
 .ceo ::-webkit-scrollbar-thumb, .ceo-pop-root ::-webkit-scrollbar-thumb { background: #e0d3ab; border-radius: 8px; }
 .ceo ::-webkit-scrollbar-button, .ceo-pop-root ::-webkit-scrollbar-button { display: none; }
 /* The shared stock panel keeps its own colours. */
-.ceo :where(:not(.ceo-classic [class*="stkp"], .ceo-classic [class*="stkp"] *)), .ceo-pop-root :where(*) { font-family: inherit !important; color: inherit !important; }
+/* .ceo-keep: a shared panel or badge dropped into a dashboard keeps its own colours. */
+.ceo :where(:not(.ceo-classic [class*="stkp"], .ceo-classic [class*="stkp"] *, .ceo-keep, .ceo-keep *)), .ceo-pop-root :where(*) { font-family: inherit !important; color: inherit !important; }
 .ceo h1, .ceo h2, .ceo h3 { margin: 0; font-weight: 400; font-family: var(--ceo-serif) !important; color: var(--ceo-gold-deep) !important; text-wrap: balance; }
 .ceo p { margin: 0; }
 .ceo svg { display: block; }

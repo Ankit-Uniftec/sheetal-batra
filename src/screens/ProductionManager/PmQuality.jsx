@@ -1,0 +1,267 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import QcHistoryPanel from "../../components/QcHistoryPanel";
+import ReJourneyPanel from "../../components/ReJourneyPanel";
+import { getStageLabel } from "../../utils/barcodeService";
+import formatDate from "../../utils/formatDate";
+import { Empty, Insight, PageHead, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
+import { defineKit } from "../CeoDashboard/dashKit";
+import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
+import { csvFromObjects } from "./PmCommon";
+import { pct, plural, todayStart } from "./pmModel";
+
+// ============================================================
+// Quality: QC checks, failures, re-work and overrides, worked out from
+// qc_records. The full QC History and the pieces in re-work (the old tabs)
+// sit underneath, unchanged.
+//
+// One rule everywhere: a Final QC override is not an inspection, so it is left
+// out of both sides of the pass rate (the same rule as the QC History tab).
+// ============================================================
+
+const LOCAL_TILES = {
+  "QC Checks": "QC inspections recorded in the period, at QC 1 and Final QC. Overrides are not counted because nobody inspected the garment.",
+  Failures: "QC checks in the period that failed.",
+  "Re-work Passes": "Failed pieces sent back to an earlier stage to be fixed, in the period.",
+  "Final QC Overrides": "Pieces marked complete without passing Final QC, in the period. Each one is recorded against the person who did it.",
+  Disposed: "Failed pieces taken off the floor to be remade from fresh cloth, in the period.",
+};
+const LOCAL_CARDS = {
+  "Pass Rate Over Time": "Share of QC checks that passed, per day (7 days) or per week (30 and 90 days). Overrides are left out.",
+  "Why Pieces Fail": "Failure reasons as the inspector recorded them at the scan station. Click a reason to see the pieces.",
+  "Where Failed Pieces Went Back To": "The stage a failed piece was sent back to for re-work. Click a stage to see the pieces.",
+  "QC 1 and Final QC": "Checks and failures at each of the two QC points.",
+  Inspectors: "Checks each inspector recorded in the period and how many failed. Click a row to see that inspector's failed pieces.",
+  "Pieces Failing More Than Once": "Pieces that failed QC two or more times in the period. Click a row to open the order.",
+};
+const { Tile, Card, Table } = defineKit({ tiles: { ...TILE_INFO, ...LOCAL_TILES }, cards: { ...CARD_INFO, ...LOCAL_CARDS }, columns: COLUMN_INFO });
+
+export const PERIODS = [{ value: "7", label: "Last 7 Days" }, { value: "30", label: "Last 30 Days" }, { value: "90", label: "Last 90 Days" }];
+/** Start of a "last N days" window (today included). */
+export const windowStart = (days) => { const d = todayStart(); d.setDate(d.getDate() - (Number(days) - 1)); return d; };
+export const GOLD = ["#6a4f0c", "#a9821f", "#cfae4e", "#e6d18f"];
+const axis = { fontSize: 11, fill: "#8a8478" };
+
+const Tip = ({ active, payload, label, format = num }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="ceo-tip">
+      <b>{label}</b>
+      {payload.filter((p) => p.value != null).map((p) => <span key={p.dataKey}><i style={{ background: p.fill || p.color }} />{p.name}: {format(p.value)}</span>)}
+    </div>
+  );
+};
+
+/**
+ * Bars with their numbers on them. One series, or several stacked: each
+ * segment's count inside it when it fits, and the stack total above.
+ * onPick(row, seriesKey) when a bar is clicked.
+ */
+export function StackBars({ data, series, height = 260, format = num, onPick, stacked = true }) {
+  if (!data?.length || !data.some((d) => series.some((s) => Number(d[s.key]) > 0))) return <Empty />;
+  const last = series.length - 1;
+  const inside = (color) => ({ x, y, width, height: h, value }) => (
+    value && h >= 16 && width >= 18 && series.length > 1
+      ? <text x={x + width / 2} y={y + h / 2} dy="0.35em" textAnchor="middle" fontSize={10.5} fontWeight={600} fill={textOn(color)} pointerEvents="none">{format(value)}</text>
+      : null
+  );
+  return (
+    <div style={{ width: "100%", height, cursor: onPick ? "pointer" : undefined }}>
+      <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
+        <BarChart data={data} margin={{ top: 22, right: 6, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke="#f1ede2" vertical={false} />
+          <XAxis dataKey="name" tick={axis} axisLine={false} tickLine={false} minTickGap={4} interval={0} tickFormatter={(v) => (String(v).length > 12 ? `${String(v).slice(0, 11)}…` : v)} />
+          <YAxis tick={axis} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
+          <Tooltip content={<Tip format={format} />} cursor={{ fill: "rgba(184,146,46,.07)" }} />
+          {series.map((s, i) => (
+            <Bar key={s.key} dataKey={s.key} name={s.name} stackId={stacked ? "a" : undefined} fill={s.color} maxBarSize={44}
+              radius={!stacked || i === last ? [6, 6, 0, 0] : [0, 0, 0, 0]} isAnimationActive={false}
+              onClick={onPick ? (bar) => onPick(bar?.payload || bar, s.key) : undefined}>
+              {series.length > 1 && <LabelList dataKey={s.key} content={inside(s.color)} />}
+              {(!stacked || i === last) && (
+                <LabelList
+                  dataKey={stacked ? (d) => series.reduce((sum, x) => sum + (Number(d[x.key]) || 0), 0) : s.key}
+                  content={data.length > 16
+                    ? sparseBarLabel(data.map((d) => ({ ...d, __t: series.reduce((sum, x) => sum + (Number(d[x.key]) || 0), 0) })), stacked ? "__t" : s.key, format)
+                    : barValueLabel(format)}
+                />
+              )}
+            </Bar>
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** A small colour key under a chart. */
+export const Legend = ({ series }) => (
+  <div className="pmq-legend">{series.map((s) => <span key={s.key}><i style={{ background: s.color }} />{s.name}</span>)}</div>
+);
+
+const inspected = (r) => r.is_override !== true;
+const failed = (r) => inspected(r) && r.result === "fail";
+
+export default function QualityPage({ ctx }) {
+  const { lazy, need, piecesById, ordersById, openPieces, openOrder } = ctx;
+  const [period, setPeriod] = useState("30");
+  const [view, setView] = useState("history");
+  useEffect(() => { need("qc90"); need("qcAll"); need("rejourneys"); }, [need]);
+  const all = lazy.qc90?.rows;
+
+  const piecesOf = (rows) => [...new Set(rows.map((r) => r.component_id).filter(Boolean))].map((id) => piecesById[id]).filter(Boolean);
+  const openRows = (title, sub, rows) => openPieces({ title, sub, pieces: piecesOf(rows) });
+
+  const data = useMemo(() => {
+    if (!all) return null;
+    const days = Number(period);
+    const start = windowStart(days);
+    const rows = all.filter((r) => new Date(r.created_at) >= start);
+    // The same length of time just before, for comparison (inside the 90 days loaded).
+    const prevStart = new Date(start); prevStart.setDate(prevStart.getDate() - days);
+    const prev = days < 90 ? all.filter((r) => { const t = new Date(r.created_at); return t >= prevStart && t < start; }) : null;
+    const checks = rows.filter(inspected);
+    const fails = rows.filter(failed);
+    const rework = fails.filter((r) => r.outcome === "rework");
+    const disposed = fails.filter((r) => r.outcome === "dispose");
+    const overrides = rows.filter((r) => r.is_override === true);
+    const rate = checks.length ? ((checks.length - fails.length) / checks.length) * 100 : null;
+    const prevChecks = prev ? prev.filter(inspected) : [];
+    const prevRate = prevChecks.length ? ((prevChecks.length - prevChecks.filter(failed).length) / prevChecks.length) * 100 : null;
+
+    // Pass rate per day (7 days) or per week (30 / 90 days), oldest first.
+    const step = days === 7 ? 1 : 7;
+    const buckets = [];
+    for (let s = new Date(start); s <= todayStart(); s.setDate(s.getDate() + step)) {
+      const from = new Date(s);
+      const to = new Date(s); to.setDate(to.getDate() + step);
+      const inB = checks.filter((r) => { const t = new Date(r.created_at); return t >= from && t < to; });
+      const f = inB.filter(failed).length;
+      buckets.push({
+        name: step === 1 ? from.toLocaleDateString("en-GB", { weekday: "short" }) : from.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+        full: step === 1 ? formatDate(from) : `Week from ${formatDate(from)}`,
+        passed: inB.length - f, failed: f, rate: inB.length ? Math.round(((inB.length - f) / inB.length) * 100) : 0,
+        rows: inB,
+      });
+    }
+
+    const group = (list, keyOf) => {
+      const m = {};
+      list.forEach((r) => { const k = keyOf(r); (m[k] || (m[k] = { name: k, value: 0, rows: [] })).rows.push(r); m[k].value += 1; });
+      return Object.values(m).sort((a, b) => b.value - a.value);
+    };
+    const reasons = group(fails, (r) => (r.fail_reason || "").trim() || "Not given");
+    const backTo = group(fails.filter((r) => r.rejourney_to_stage), (r) => getStageLabel(r.rejourney_to_stage).replace(/ In-Progress$/, ""));
+    const qcPoints = ["qc1", "final"].map((k) => {
+      const c = checks.filter((r) => (r.which_qc === "final" ? "final" : "qc1") === k);
+      const f = c.filter(failed);
+      return { name: k === "final" ? "Final QC" : "QC 1", passed: c.length - f.length, failed: f.length, rows: c, fails: f };
+    });
+    const inspectors = group(checks, (r) => r.inspected_by || "Not recorded").map((g) => {
+      const f = g.rows.filter(failed);
+      return { ...g, fails: f, failPct: pct(f.length, g.value) };
+    });
+    const repeat = group(fails.filter((r) => r.component_id), (r) => r.component_id)
+      .filter((g) => g.value > 1)
+      .map((g) => ({ id: g.name, count: g.value, rows: g.rows, piece: piecesById[g.name], order_id: g.rows[0].order_id, order_no: g.rows[0].order_no, barcode: g.rows[0].barcode, reasons: [...new Set(g.rows.map((r) => (r.fail_reason || "").trim()).filter(Boolean))] }));
+    return { rows, checks, fails, rework, disposed, overrides, rate, prevRate, buckets, reasons, backTo, qcPoints, inspectors, repeat, step };
+  }, [all, period, piecesById]);
+
+  const label = PERIODS.find((p) => p.value === period)?.label;
+  const PASSFAIL = [{ key: "passed", name: "Passed", color: GOLD[1] }, { key: "failed", name: "Failed", color: GOLD[3] }];
+
+  return (
+    <div className="ceo-page">
+      <PageHead title="Quality" desc="QC checks, why pieces fail, and where they go back to. Click any figure to see the pieces behind it.">
+        <Seg label="Period" value={period} onChange={setPeriod} options={PERIODS} />
+      </PageHead>
+      {!data ? <section className="ceo-card"><Empty text={lazy.qc90?.error ? `QC records could not be loaded: ${lazy.qc90.error}` : "Loading QC records…"} /></section> : (
+        <>
+          <div className="ceo-tiles">
+            <Tile icon="integrity" label="QC Checks" value={num(data.checks.length)} note={label} onClick={() => openRows("QC Checks", label, data.checks)} />
+            <Tile icon="sale" label="QC Pass Rate" value={data.rate == null ? "–" : `${data.rate.toFixed(1)}%`} delta={data.rate != null && data.prevRate != null ? data.rate - data.prevRate : null} note={data.prevRate != null ? "points vs the period before" : label} onClick={() => openRows("Passed QC", label, data.checks.filter((r) => !failed(r)))} />
+            <Tile icon="alert" tone={data.fails.length ? "warn" : undefined} label="Failures" value={num(data.fails.length)} note={`${num(piecesOf(data.fails).length)} pieces`} onClick={() => openRows("Failed QC", label, data.fails)} />
+            <Tile icon="refresh" label="Re-work Passes" value={num(data.rework.length)} note="Sent back to fix" onClick={() => openRows("Sent Back for Re-work", label, data.rework)} />
+            <Tile icon="close" label="Disposed" value={num(data.disposed.length)} note="Remade from fresh cloth" onClick={() => openRows("Disposed After QC", label, data.disposed)} />
+            <Tile icon="edit" label="Final QC Overrides" value={num(data.overrides.length)} note="Completed without Final QC" onClick={() => openRows("Final QC Overrides", label, data.overrides)} />
+          </div>
+
+          <div className="ceo-grid">
+            <Card span={12} title="What This Says">
+              <div className="pmq-insights">
+                {data.rate == null ? <Insight>No QC checks were recorded in this period.</Insight> : (
+                  <Insight tone={data.prevRate != null && data.rate < data.prevRate - 1 ? "warn" : "gold"}>
+                    <b>{data.rate.toFixed(1)}%</b> of {plural(data.checks.length, "check")} passed{data.prevRate != null ? `, against ${data.prevRate.toFixed(1)}% in the ${period} days before` : ""}.
+                  </Insight>
+                )}
+                {data.reasons[0] && (
+                  <Insight tone="warn">The most common reason for failing is <b>{data.reasons[0].name}</b>: {plural(data.reasons[0].value, "failure")}, {pct(data.reasons[0].value, data.fails.length)}% of all failures.</Insight>
+                )}
+                {data.backTo[0] && <Insight>Failed pieces most often go back to <b>{data.backTo[0].name}</b> ({plural(data.backTo[0].value, "time")}).</Insight>}
+                {data.repeat.length > 0 && <Insight tone="warn"><b>{plural(data.repeat.length, "piece")}</b> failed QC more than once; they are listed below.</Insight>}
+                {data.overrides.length > 0 && <Insight><b>{plural(data.overrides.length, "piece")}</b> {data.overrides.length === 1 ? "was" : "were"} completed without passing Final QC.</Insight>}
+              </div>
+            </Card>
+
+            <Card span={7} md={12} title="Pass Rate Over Time" sub={`Passed and failed checks ${data.step === 1 ? "per day" : "per week"}; the total is above each bar. Click a bar for its pieces.`}>
+              <StackBars data={data.buckets} series={PASSFAIL} height={260}
+                onPick={(b, key) => { const row = data.buckets.find((x) => x.name === b.name); if (row) openRows(`${key === "failed" ? "Failed" : "Checked"}: ${row.full}`, `${row.rate}% passed`, key === "failed" ? row.rows.filter(failed) : row.rows); }} />
+              <Legend series={PASSFAIL} />
+              <div className="pmq-rates">{data.buckets.map((b) => <span key={b.full}><small>{b.name}</small><b>{b.passed + b.failed ? `${b.rate}%` : "–"}</b></span>)}</div>
+            </Card>
+
+            <Card span={5} md={12} title="QC 1 and Final QC" sub="Passed and failed at each check point">
+              <StackBars data={data.qcPoints} series={PASSFAIL} height={220}
+                onPick={(b, key) => { const row = data.qcPoints.find((x) => x.name === b.name); if (row) openRows(`${row.name}: ${key === "failed" ? "Failed" : "All Checks"}`, label, key === "failed" ? row.fails : row.rows); }} />
+              <Legend series={PASSFAIL} />
+              <div className="pmq-rates">{data.qcPoints.map((q) => <span key={q.name}><small>{q.name} pass rate</small><b>{q.passed + q.failed ? `${pct(q.passed, q.passed + q.failed)}%` : "–"}</b></span>)}</div>
+            </Card>
+
+            <Card span={6} md={12} title="Why Pieces Fail" sub="Click a reason to see its pieces">
+              <RankBars rows={data.reasons} limit={10} format={(v) => plural(v, "failure")} sub={(r) => `${pct(r.value, data.fails.length)}% of failures`}
+                onRow={(r) => openRows(`Failed: ${r.name}`, label, r.rows)} />
+            </Card>
+
+            <Card span={6} md={12} title="Where Failed Pieces Went Back To" sub="The stage each failed piece was sent back to">
+              <RankBars rows={data.backTo} limit={10} format={(v) => plural(v, "piece")} sub={(r) => `${pct(r.value, data.backTo.reduce((s, x) => s + x.value, 0))}% of re-work`}
+                onRow={(r) => openRows(`Sent Back to ${r.name}`, label, r.rows)} />
+            </Card>
+
+            <Card span={6} md={12} title="Inspectors" sub="Click an inspector to see the pieces they failed">
+              <Table rowKey={(r) => r.name} rows={data.inspectors.slice(0, 12)} onRow={(r) => openRows(`Failed by ${r.name}`, label, r.fails)} empty="No checks in this period." columns={[
+                { key: "name", label: "Inspector", render: (r) => <span className="pm-cell"><b>{r.name}</b></span> },
+                { key: "checks", label: "Checks", right: true, render: (r) => num(r.value) },
+                { key: "fails", label: "Failed", right: true, render: (r) => num(r.fails.length) },
+                { key: "pct", label: "Fail Rate", right: true, render: (r) => `${r.failPct}%` },
+              ]} />
+              {data.inspectors.length > 0 && (
+                <button type="button" className="ceo-link pm-more" onClick={() => csvFromObjects(`qc inspectors ${label}`, data.inspectors.map((r) => ({ Inspector: r.name, Checks: r.value, Failed: r.fails.length, "Fail Rate %": r.failPct })))}>Export CSV</button>
+              )}
+            </Card>
+
+            <Card span={6} md={12} title="Pieces Failing More Than Once" sub="Click a piece to open its order">
+              <Table rowKey={(r) => r.id} rows={data.repeat.slice(0, 12)} onRow={(r) => ordersById[r.order_id] && openOrder(ordersById[r.order_id])} empty="No piece failed twice in this period." columns={[
+                { key: "piece", label: "Piece", render: (r) => <span className="pm-cell"><b>{r.piece?.component_label || r.piece?.component_type || "Piece"} <span className="pm-code">{r.barcode}</span></b><small>{r.reasons.join(", ") || "No reason given"}</small></span> },
+                { key: "n", label: "Failed", right: true, render: (r) => plural(r.count, "time") },
+              ]} />
+              {data.repeat.length > 12 && <button type="button" className="ceo-link pm-more" onClick={() => openRows("Failing More Than Once", label, data.repeat.flatMap((r) => r.rows))}>See all {num(data.repeat.length)}</button>}
+            </Card>
+          </div>
+        </>
+      )}
+
+      <div className="pm-tabs-scroll pmq-tabs"><Seg label="Records" value={view} onChange={setView} options={[{ value: "history", label: "QC History" }, { value: "rework", label: "Pieces in Re-work" }]} /></div>
+      <section className="ceo-card pm-classic ceo-keep">
+        {view === "history" && (
+          <QcHistoryPanel records={lazy.qcAll?.rows || []} loading={!lazy.qcAll || lazy.qcAll.loading} hideMoney
+            onOrderClick={(id) => ordersById[id] && openOrder(ordersById[id])} />
+        )}
+        {view === "rework" && (
+          <ReJourneyPanel rows={lazy.rejourneys?.rows || []} loading={!lazy.rejourneys || lazy.rejourneys.loading}
+            onOrderClick={(id) => ordersById[id] && openOrder(ordersById[id])} />
+        )}
+      </section>
+      <p className="pm-foot-note">Final QC overrides are left out of the pass rate: nobody inspected those garments. The charts above cover up to the last 90 days; the QC History below holds every record.</p>
+    </div>
+  );
+}

@@ -17,6 +17,14 @@ const SCANNED_FILES = [
   "src/utils/vendorDelays.js", "src/components/ComponentJourneyModal.jsx",
   "src/components/stock/StockPanel.jsx", "src/utils/stockVisibility.js",
   "src/components/ProductionOverrides.jsx", "src/utils/itemCategory.js", "src/utils/scanReport.js",
+  // The new Production Manager dashboard (src/screens/ProductionManager).
+  "src/screens/ProductionManager/PmDashboard.jsx", "src/screens/ProductionManager/pmModel.js",
+  "src/screens/ProductionManager/PmCommon.jsx", "src/screens/ProductionManager/PmToday.jsx",
+  "src/screens/ProductionManager/PmOrders.jsx", "src/screens/ProductionManager/PmFloor.jsx",
+  "src/screens/ProductionManager/PmPlanning.jsx", "src/screens/ProductionManager/PmQuality.jsx",
+  "src/screens/ProductionManager/PmVendors.jsx", "src/screens/ProductionManager/PmDispatch.jsx",
+  "src/screens/ProductionManager/PmPeople.jsx", "src/screens/ProductionManager/PmApprovals.jsx",
+  "src/screens/ProductionManager/PmMore.jsx",
 ];
 
 // Named in those files but deliberately NOT loaded (only mentioned in comments

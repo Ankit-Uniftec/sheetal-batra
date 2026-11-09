@@ -1,0 +1,256 @@
+import React, { useEffect, useMemo } from "react";
+import { STAGE_GROUPS, getStageGroupKey } from "../../utils/barcodeService";
+import { Columns, Empty, Insight, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
+import { defineKit } from "../CeoDashboard/dashKit";
+import { FloorBars, useFloor } from "./PmToday";
+import {
+  DAY, FLOOR_STEPS, dayKey, floorKey, median, overdueDays, pct, pieceState, plural, todayStart,
+} from "./pmModel";
+
+// ============================================================
+// Floor & Flow: where the pieces are, where they get held up, how fast they
+// move and how much comes off the line each day. Worked out from the live
+// pieces and the last 30 days of scans.
+// ============================================================
+
+const { Tile, Card } = defineKit({
+  tiles: {
+    "Pieces on the Floor": "Pieces of running orders being worked on in the warehouse right now.",
+    "At Vendors": "Pieces of running orders out with an outside vendor right now.",
+    "Stuck Pieces": "Pieces in the warehouse that have stayed at their stage longer than the stage's time limit.",
+    "Not Started": "Pieces of running orders not yet scanned at Cloth Issue.",
+    "Finished in 30 Days": "Pieces that reached Completed, Packaging or Dispatched in the last 30 days (each piece counted once).",
+    "Average Lead Time": "For orders whose last piece was finished in the last 30 days: average days from the order being placed to that last piece being finished.",
+  },
+  cards: {
+    "The Floor Right Now": "Where every piece of a running order is at this moment, by stage, split into in the warehouse and out at vendors. Click a stage or a bar to see its pieces.",
+    "Stuck by Stage": "Pieces in the warehouse past their stage's time limit, by stage and by how many days over. Click a segment to see the pieces.",
+    Bottlenecks: "Average days a piece spent in each stage over the last 30 days, from the scan that brought it into the stage to the scan that moved it on. Only stays that started and ended in the 30 days are counted. The median is shown underneath.",
+    "Daily Throughput": "Pieces finished (reached Completed, Packaging or Dispatched) each day over the last 30 days. Click a day to see the pieces.",
+    "Where Pieces Went Next": "The most common moves from one stage to the next over the last 30 days, counted per piece move. Click a row to see the pieces.",
+    "Ageing of Running Orders": "Running orders by how many days ago they were placed. Click a bar to see the orders.",
+    "Re-work by Stage": "Pieces of running orders that have been sent back at least once, by the stage they are at now. Click a stage to see the pieces.",
+  },
+});
+
+const FINISH = new Set(["production_complete", "packaging_dispatch", "dispatched"]);
+const GROUP_LABEL = Object.fromEntries(STAGE_GROUPS.map((g) => [g.key, g.label]));
+const fmtDays = (v) => (v >= 10 ? `${Math.round(v)} days` : `${v.toFixed(1)} days`);
+const groupOf = (stage) => (stage === "order_received" ? "order_received" : getStageGroupKey(stage));
+
+/** Pieces in the warehouse past their stage limit, by stage and days over. */
+function StuckBars({ ctx, stuck }) {
+  const rows = useMemo(() => FLOOR_STEPS.map((g) => {
+    const here = stuck.filter((c) => floorKey(c) === g.key);
+    return {
+      g, here,
+      segs: [
+        { key: "a", label: "1–2 days over", list: here.filter((c) => overdueDays(c) <= 2) },
+        { key: "b", label: "3–7 days over", list: here.filter((c) => overdueDays(c) >= 3 && overdueDays(c) <= 7) },
+        { key: "c", label: "8+ days over", list: here.filter((c) => overdueDays(c) >= 8) },
+      ],
+    };
+  }).filter((r) => r.here.length), [stuck]);
+  if (!rows.length) return <Empty text="No piece is past its stage limit." />;
+  const max = Math.max(...rows.map((r) => r.here.length), 1);
+  return (
+    <div className="pmf-stuck">
+      <div className="pmf-legend"><span><i className="is-a" />1–2 days over</span><span><i className="is-b" />3–7 days over</span><span><i className="is-c" />8+ days over</span></div>
+      {rows.map(({ g, here, segs }) => (
+        <div key={g.key} className="pmf-row">
+          <button type="button" className="pmf-name" onClick={() => ctx.openPieces({ title: `Stuck: ${g.label}`, sub: "In the warehouse past the stage's time limit", pieces: here })}>
+            <b>{g.label}</b><small>{num(here.length)}</small>
+          </button>
+          <span className="pmf-track">
+            {segs.filter((s) => s.list.length).map((s) => (
+              <button key={s.key} type="button" className={`pmf-seg is-${s.key}`} style={{ width: `${(s.list.length / max) * 100}%` }} title={`${num(s.list.length)} ${s.label}`}
+                onClick={() => ctx.openPieces({ title: `${g.label}: ${s.label}`, sub: "In the warehouse past the stage's time limit", pieces: s.list })}>
+                <span>{num(s.list.length)}</span>
+              </button>
+            ))}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function FloorPage({ ctx }) {
+  const { need, lazy, openOrders, openPieces, piecesById, componentsByOrder, orders } = ctx;
+  useEffect(() => { need("scans30"); }, [need]);
+  const floor = useFloor(ctx);
+  const scans = lazy.scans30?.rows;
+
+  // Everything that needs the 30 days of scans, in one pass.
+  const flow = useMemo(() => {
+    if (!scans) return null;
+    const start = todayStart(); start.setDate(start.getDate() - 29);
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = todayStart(); d.setDate(d.getDate() - i);
+      days.push({ key: dayKey(d), name: d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), set: new Set() });
+    }
+    const dayBy = Object.fromEntries(days.map((d) => [d.key, d]));
+    const finishedAt = {}; // component -> last finish time in the window
+    const byComp = {};
+    scans.forEach((t) => {
+      (byComp[t.component_id] || (byComp[t.component_id] = [])).push(t);
+      if (FINISH.has(t.to_stage) && !FINISH.has(t.from_stage)) {
+        const d = dayBy[dayKey(new Date(t.scanned_at))];
+        if (d) d.set.add(t.component_id);
+        const ms = new Date(t.scanned_at).getTime();
+        if (!finishedAt[t.component_id] || ms > finishedAt[t.component_id]) finishedAt[t.component_id] = ms;
+      }
+    });
+    // Stage stays and stage-to-stage moves, per piece (scans arrive oldest first).
+    const stays = {};
+    const moves = {};
+    Object.entries(byComp).forEach(([cid, list]) => {
+      let cur = null;
+      let since = null;
+      list.forEach((t) => {
+        const g = groupOf(t.to_stage);
+        if (!g || g === cur) return; // gate scans and moves inside a stage keep the stay going
+        const at = new Date(t.scanned_at).getTime();
+        if (cur && since != null) {
+          (stays[cur] || (stays[cur] = [])).push((at - since) / DAY);
+          const k = `${cur}>${g}`;
+          const m = moves[k] || (moves[k] = { key: k, from: cur, to: g, ids: new Set(), value: 0 });
+          m.value += 1; m.ids.add(cid);
+        } else if (t.from_stage) {
+          const fg = groupOf(t.from_stage);
+          if (fg && fg !== g) {
+            const k = `${fg}>${g}`;
+            const m = moves[k] || (moves[k] = { key: k, from: fg, to: g, ids: new Set(), value: 0 });
+            m.value += 1; m.ids.add(cid);
+          }
+        }
+        cur = g; since = at;
+      });
+    });
+    const bottlenecks = STAGE_GROUPS.filter((g) => g.key !== "packaging" && stays[g.key]?.length)
+      .map((g) => {
+        const list = stays[g.key];
+        const avgDays = list.reduce((s, v) => s + v, 0) / list.length;
+        return { key: g.key, name: g.label, value: Math.round(avgDays * 10) / 10, median: median(list), n: list.length };
+      })
+      .sort((a, b) => b.value - a.value);
+    // Lead time: orders whose live pieces are all finished now, the last one inside the window.
+    const lead = [];
+    const leadOrders = [];
+    orders.forEach((o) => {
+      const live = (componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at && pieceState(c) !== "disposed");
+      if (!live.length || !live.every((c) => pieceState(c) === "finished")) return;
+      const times = live.map((c) => finishedAt[c.id]).filter(Boolean);
+      if (!times.length) return;
+      const last = Math.max(...times);
+      if (last < start.getTime()) return;
+      const placed = new Date(o.created_at).getTime();
+      if (!placed || last < placed) return;
+      lead.push((last - placed) / DAY);
+      leadOrders.push(o);
+    });
+    const finishedIds = new Set(days.flatMap((d) => [...d.set]));
+    return {
+      days: days.map((d) => ({ name: d.name, value: d.set.size, ids: [...d.set] })),
+      finishedIds: [...finishedIds],
+      bottlenecks,
+      moves: Object.values(moves).sort((a, b) => b.value - a.value),
+      leadAvg: lead.length ? lead.reduce((s, v) => s + v, 0) / lead.length : null,
+      leadMedian: lead.length ? median(lead) : null,
+      leadOrders,
+    };
+  }, [scans, orders, componentsByOrder]);
+
+  const ageing = useMemo(() => {
+    const B = [
+      { name: "0–7 days", min: 0, max: 7 }, { name: "8–14 days", min: 8, max: 14 }, { name: "15–30 days", min: 15, max: 30 },
+      { name: "31–60 days", min: 31, max: 60 }, { name: "60+ days", min: 61, max: Infinity },
+    ].map((b) => ({ ...b, list: [] }));
+    const today = todayStart();
+    floor.running.forEach((o) => {
+      const placed = new Date(o.created_at); placed.setHours(0, 0, 0, 0);
+      const age = Math.round((today - placed) / DAY);
+      const b = B.find((x) => age >= x.min && age <= x.max);
+      if (b) b.list.push(o);
+    });
+    return B.map((b) => ({ name: b.name, value: b.list.length, list: b.list }));
+  }, [floor.running]);
+
+  const rework = useMemo(() => {
+    const m = {};
+    floor.pieces.filter((c) => Number(c.re_journey_count) > 0 && !["finished", "removed"].includes(pieceState(c))).forEach((c) => {
+      const k = floorKey(c) || "other";
+      const r = m[k] || (m[k] = { key: k, name: GROUP_LABEL[k] || "Other", value: 0, list: [] });
+      r.value += 1; r.list.push(c);
+    });
+    return Object.values(m).sort((a, b) => b.value - a.value);
+  }, [floor.pieces]);
+
+  const slowest = flow?.bottlenecks?.[0];
+  const stuckShare = pct(floor.stuck.length, floor.inHouse.length);
+  const finishedPieces = flow ? flow.finishedIds.map((id) => piecesById[id]).filter(Boolean) : [];
+  const loading = !flow;
+
+  return (
+    <div className="ceo-page">
+      <PageHead title="Floor & Flow" desc="Where the pieces are, where they are held up and how fast they move. Based on the live floor and the last 30 days of scans." />
+      <div className="ceo-tiles">
+        <Tile icon="movements" label="Pieces on the Floor" value={num(floor.inHouse.length)} note={`${num(floor.running.length)} running orders`} onClick={() => openPieces({ title: "Pieces on the Floor", sub: "Being worked on in the warehouse", pieces: floor.inHouse })} />
+        <Tile icon="warehouse" label="At Vendors" value={num(floor.atVendor.length)} note="Out right now" onClick={() => openPieces({ title: "At Vendors", sub: "Out with an outside vendor right now", pieces: floor.atVendor })} />
+        <Tile icon="alert" tone={floor.stuck.length ? "warn" : undefined} label="Stuck Pieces" value={num(floor.stuck.length)} note={`${stuckShare}% of the floor`} onClick={() => openPieces({ title: "Stuck Pieces", sub: "In the warehouse past the stage's time limit", pieces: floor.stuck })} />
+        <Tile icon="stock" label="Not Started" value={num(floor.notStarted.length)} note="Waiting for Cloth Issue" onClick={() => openPieces({ title: "Not Started", sub: "Waiting to be scanned at Cloth Issue", pieces: floor.notStarted })} />
+        <Tile icon="trend" label="Average Lead Time" value={loading ? "…" : flow.leadAvg == null ? "–" : fmtDays(flow.leadAvg)}
+          note={loading ? "Loading scans" : flow.leadMedian == null ? "No finished orders" : `Median ${fmtDays(flow.leadMedian)} · ${plural(flow.leadOrders.length, "order")}`}
+          onClick={loading || !flow.leadOrders.length ? undefined : () => openOrders({ title: "Finished in the Last 30 Days", sub: "Orders whose last piece was finished in the last 30 days", orders: flow.leadOrders })} />
+      </div>
+
+      {(slowest || floor.stuck.length > 0) && (
+        <Insight tone={stuckShare >= 25 ? "warn" : "gold"}>
+          {slowest && <>Pieces spend longest at <b>{slowest.name}</b>: {fmtDays(slowest.value)} on average over the last 30 days. </>}
+          {floor.inHouse.length > 0 && <><b>{stuckShare}%</b> of the pieces in the warehouse ({num(floor.stuck.length)}) are past their stage's time limit.</>}
+        </Insight>
+      )}
+
+      <div className="ceo-grid">
+        <Card span={7} md={12} title="The Floor Right Now" sub={`${num(floor.inHouse.length)} in the warehouse · ${num(floor.atVendor.length)} at vendors`}>
+          <FloorBars ctx={ctx} pieces={[...floor.inHouse, ...floor.atVendor]} />
+        </Card>
+        <Card span={5} md={12} title="Stuck by Stage" sub={`${num(floor.stuck.length)} pieces past the stage limit`}>
+          <StuckBars ctx={ctx} stuck={floor.stuck} />
+        </Card>
+
+        <Card span={5} md={12} title="Bottlenecks" sub="Average days spent in each stage, last 30 days">
+          {loading ? <Empty text="Loading the last 30 days of scans…" /> : (
+            <RankBars rows={flow.bottlenecks} limit={12} format={(v) => fmtDays(v)}
+              sub={(r) => `Median ${fmtDays(r.median)} · ${plural(r.n, "stay")}`}
+              onRow={(r) => openPieces({ title: `At ${r.name} Now`, sub: "Pieces of running orders at this stage", pieces: floor.pieces.filter((c) => floorKey(c) === r.key && pieceState(c) !== "finished") })} />
+          )}
+        </Card>
+        <Card span={7} md={12} title="Daily Throughput" sub={loading ? undefined : `${num(finishedPieces.length)} pieces finished in 30 days. Click a day to see them.`}>
+          {loading ? <Empty text="Loading…" /> : (
+            <Columns data={flow.days} money={false} name="Pieces finished" height={260} highlight={(d) => d === flow.days[flow.days.length - 1]}
+              onPick={(d) => openPieces({ title: `Finished: ${d.name}`, sub: "Pieces that reached Completed, Packaging or Dispatched", pieces: (d.ids || []).map((id) => piecesById[id]).filter(Boolean) })} />
+          )}
+        </Card>
+
+        <Card span={6} md={12} title="Where Pieces Went Next" sub="The most common stage-to-stage moves, last 30 days">
+          {loading ? <Empty text="Loading…" /> : (
+            <RankBars rows={flow.moves.map((m) => ({ ...m, name: `${GROUP_LABEL[m.from] || m.from} → ${GROUP_LABEL[m.to] || m.to}` }))} limit={10}
+              format={(v) => plural(v, "move")} sub={(r) => plural(r.ids.size, "piece")}
+              onRow={(r) => openPieces({ title: r.name, sub: "Pieces that made this move in the last 30 days", pieces: [...r.ids].map((id) => piecesById[id]).filter(Boolean) })} />
+          )}
+        </Card>
+        <Card span={6} md={12} title="Ageing of Running Orders" sub="Days since the order was placed. Click a bar to see the orders.">
+          <Columns data={ageing} money={false} name="Orders" height={260} highlight={(d) => d.name === "60+ days" || d.name === "31–60 days"}
+            onPick={(d) => { const b = ageing.find((x) => x.name === d.name); if (b) openOrders({ title: `Placed ${b.name} Ago`, sub: "Running orders", orders: b.list }); }} />
+        </Card>
+
+        <Card span={12} title="Re-work by Stage" sub={`${num(rework.reduce((s, r) => s + r.value, 0))} pieces of running orders have been sent back at least once`}>
+          <RankBars rows={rework} limit={12} format={(v) => plural(v, "piece")}
+            onRow={(r) => openPieces({ title: `Re-work at ${r.name}`, sub: "Sent back at least once, now at this stage", pieces: r.list })} />
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -158,6 +158,43 @@ const visitedSteps = (transitions, movements) => {
   return seen;
 };
 
+/** For each step: when the piece first reached it, how long it spent there in
+ *  all, and the vendor it went to for it (if any). */
+const stageStats = (transitions, movements, comp) => {
+  const out = {};
+  const at = (i) => (out[i] || (out[i] = { firstAt: null, ms: 0, vendor: null }));
+  const ts = transitions || [];
+  const live = !DONE_STAGES.has(comp.current_stage) && !STOPPED_STAGES.has(comp.current_stage) && !comp.cancelled_at;
+  ts.forEach((t, k) => {
+    const i = stepIndexOf(t.to_stage);
+    if (i < 0) return;
+    const s = at(i);
+    const when = new Date(t.scanned_at).getTime();
+    if (!s.firstAt || when < s.firstAt) s.firstAt = when;
+    const next = ts[k + 1] ? new Date(ts[k + 1].scanned_at).getTime() : (live ? Date.now() : when);
+    s.ms += Math.max(0, next - when);
+  });
+  (movements || []).forEach((m) => {
+    (Array.isArray(m.stages_outside) ? m.stages_outside : []).forEach((n) => {
+      const i = STEP_LIST.findIndex((g) => g.step === Number(n) && g.external);
+      if (i < 0) return;
+      const s = at(i);
+      const when = m.exit_scan_at ? new Date(m.exit_scan_at).getTime() : null;
+      if (when && (!s.firstAt || when < s.firstAt)) s.firstAt = when;
+      s.vendor = m.vendor_name || s.vendor;
+    });
+  });
+  return out;
+};
+const shortDate = (ms) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
+const PersonIcon = () => (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3.6" /><path d="M5 20c.8-3.8 3.6-5.6 7-5.6s6.2 1.8 7 5.6" strokeLinecap="round" /></svg>
+);
+const StationIcon = () => (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8" strokeLinecap="round" /></svg>
+);
+
 const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
   const [journeyData, setJourneyData] = useState([]); // [{ component, transitions, movements }]
   const [loading, setLoading] = useState(true);
@@ -309,6 +346,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
             <div className="cjm-body">
               {/* Left: one card per piece, with how far along it is */}
               <div className="cjm-pieces">
+                <p className="cjm-pieces-title">{journeyData.length > 1 ? "Pieces · choose one" : "Piece"}</p>
                 {journeyData.map(({ component: c, movements: cm }) => {
                   const st = pieceStatus(c, cm);
                   const active = selected?.component.id === c.id;
@@ -383,24 +421,53 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                         </div>
                       )}
 
-                      {/* The step line: done, current and still to come. Steps a
-                          piece moved past without a scan read as skipped. */}
-                      <div className="cjm-steps-wrap">
-                        <ol className="cjm-steps">
-                          {STEP_LIST.map((g, i) => {
-                            const isCurrent = i === st.idx && !st.stopped && c.current_stage !== "dispatched";
-                            const isDone = c.current_stage === "dispatched" ? true : i < st.idx || (st.stopped && i <= st.idx);
-                            const skipped = isDone && !visited.has(i) && i > 0;
-                            const state = isCurrent ? "current" : isDone ? (skipped ? "skipped" : "done") : "todo";
-                            return (
-                              <li key={g.key} className={`cjm-step is-${state}`} title={skipped ? `${g.label} — not needed for this piece` : g.label}>
-                                <span className="cjm-step-dot">{state === "done" ? "✓" : ""}</span>
-                                <span className="cjm-step-label">{g.label}</span>
-                              </li>
-                            );
-                          })}
+                      {/* The stage map: every step in order, each saying whether
+                          it is done (with the date and the time spent), where the
+                          piece is now, not needed, or still to come. */}
+                      <section className="cjm-section cjm-section-first">
+                        <div className="cjm-section-row">
+                          <p className="cjm-section-title">Stages</p>
+                          <span className="cjm-legend">
+                            <span><i className="is-done" />Done</span><span><i className="is-current" />Now</span><span><i className="is-skipped" />Not needed</span><span><i className="is-todo" />To come</span>
+                          </span>
+                        </div>
+                        <ol className="cjm-map">
+                          {(() => {
+                            const stats = stageStats(transitions, movements, c);
+                            let nextMarked = false;
+                            return STEP_LIST.map((g, i) => {
+                              const isCurrent = i === st.idx && !st.stopped && c.current_stage !== "dispatched";
+                              const isDone = c.current_stage === "dispatched" ? true : i < st.idx || (st.stopped && i <= st.idx);
+                              const skipped = isDone && !visited.has(i) && i > 0;
+                              const state = isCurrent ? "current" : isDone ? (skipped ? "skipped" : "done") : "todo";
+                              const isNext = state === "todo" && !nextMarked && !st.stopped;
+                              if (isNext) nextMarked = true;
+                              const info = stats[i];
+                              const word = state === "current" ? (st.done ? "Finished" : c.is_outside_wh ? "Now · at vendor" : "Now")
+                                : state === "done" ? "Done" : state === "skipped" ? "Not needed" : isNext ? "Up next" : "To come";
+                              return (
+                                <li key={g.key} className={`cjm-stop is-${state}${isNext ? " is-next" : ""}`}>
+                                  <span className="cjm-stop-top">
+                                    <span className="cjm-stop-num">{state === "done" ? "✓" : i === 0 ? "•" : i}</span>
+                                    <span className="cjm-stop-word">{word}</span>
+                                  </span>
+                                  <span className="cjm-stop-name">{g.label}</span>
+                                  <span className="cjm-stop-foot">
+                                    {state === "done" && info?.firstAt && <>{shortDate(info.firstAt)}{info.ms >= 60000 ? ` · ${fmtSpan(info.ms)}` : ""}</>}
+                                    {state === "current" && (st.done
+                                      ? (info?.firstAt ? `Finished ${shortDate(info.firstAt)}` : "Finished")
+                                      : st.notStarted ? "Waiting to start"
+                                      : info?.ms >= 60000 ? `Here ${fmtSpan(info.ms)}` : "Just arrived")}
+                                    {state === "skipped" && "Skipped for this piece"}
+                                    {state === "todo" && "\u00a0"}
+                                  </span>
+                                  {info?.vendor && (state === "done" || state === "current") && <span className="cjm-stop-vendor">{info.vendor}</span>}
+                                </li>
+                              );
+                            });
+                          })()}
                         </ol>
-                      </div>
+                      </section>
 
                       {/* Key facts */}
                       <div className="cjm-facts">
@@ -499,9 +566,9 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                         ) : (
                           days.map((day) => (
                             <div key={day.key} className="cjm-day">
-                              <div className="cjm-day-head">{day.heading}<span>{plural(day.rows.length, "scan")}</span></div>
-                              <div className="cjm-timeline">
-                                {day.rows.map(({ t, gap }) => {
+                              <div className="cjm-day-head"><b>{day.heading}</b><span>{plural(day.rows.length, "scan")}</span></div>
+                              <div className="cjm-scans">
+                                {day.rows.map(({ t, gap }, k) => {
                                   // Shared classifier: internal production scan vs external
                                   // vendor movement (+ headline). The security gate doesn't
                                   // change the stage, so it reads "Sent to Vendor (Dyeing)".
@@ -509,26 +576,32 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                                   const tone = t.transition_type === "rejourney" || /failed/.test(t.to_stage || "")
                                     ? "warn"
                                     : d.kind === "external" ? "ext" : DONE_STAGES.has(t.to_stage) ? "done" : "";
+                                  const typeWord = d.showType ? String(t.transition_type || "").replace(/_/g, " ") : null;
+                                  // Time between this scan and the one before it in time,
+                                  // shown between the two cards.
+                                  const between = gap != null && gap >= 60000 ? fmtSpan(gap) : null;
                                   return (
-                                    <div key={t.id} className={`cjm-timeline-item ${tone ? `is-${tone}` : ""}`}>
-                                      <span className="cjm-time">{timeOf(t.scanned_at)}</span>
-                                      <span className="cjm-timeline-dot" />
-                                      <div className="cjm-timeline-content">
-                                        <p className="cjm-timeline-stage">
-                                          {d.headline}
-                                          <ScanKindTag kind={d.kind} />
-                                        </p>
-                                        <p className="cjm-timeline-meta">
-                                          {t.scanned_by || "—"}<FactoryBadge factory={t.factory} />
-                                          {t.station_name ? <span> · {t.station_name}</span> : null}
-                                          {d.showType && <span> · {String(t.transition_type || "").replace(/_/g, " ")}</span>}
-                                        </p>
-                                        {gap != null && gap >= 60000 && (
-                                          <p className="cjm-gap">{fmtSpan(gap)} after the previous scan</p>
-                                        )}
-                                        {t.notes && <p className="cjm-timeline-notes">{t.notes}</p>}
+                                    <React.Fragment key={t.id}>
+                                      {!newestFirst && between && <div className="cjm-between"><span>{between} later</span></div>}
+                                      <div className={`cjm-scan${tone ? ` is-${tone}` : ""}${k === day.rows.length - 1 ? " is-last" : ""}`}>
+                                        <span className="cjm-scan-rail"><span className="cjm-scan-dot" /></span>
+                                        <div className="cjm-scan-card">
+                                          <div className="cjm-scan-head">
+                                            <span className="cjm-scan-time">{timeOf(t.scanned_at)}</span>
+                                            <span className="cjm-scan-title">{d.headline}</span>
+                                            <ScanKindTag kind={d.kind} />
+                                          </div>
+                                          <div className="cjm-scan-meta">
+                                            <span className="cjm-chip"><PersonIcon />{t.scanned_by || "Unknown"}</span>
+                                            {t.station_name && <span className="cjm-chip"><StationIcon />{t.station_name}</span>}
+                                            <FactoryBadge factory={t.factory} />
+                                            {typeWord && <span className="cjm-chip is-type">{typeWord}</span>}
+                                          </div>
+                                          {t.notes && <p className="cjm-scan-note">{t.notes}</p>}
+                                        </div>
                                       </div>
-                                    </div>
+                                      {newestFirst && between && <div className="cjm-between"><span>{between} after the scan below</span></div>}
+                                    </React.Fragment>
                                   );
                                 })}
                               </div>

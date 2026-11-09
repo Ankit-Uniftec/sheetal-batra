@@ -8,6 +8,10 @@ import "./DispatchReport.css";
 // Dispatch report (open point #11) — every box dispatched in the period, one
 // row per box, refreshed every minute while open, printable on A4. Shared by
 // the Packaging and Production Manager dashboards. Read-only.
+//
+// hideMoney: production dashboards show no money and no client contact
+// details, so the address, pincode, phone, box value, to-collect and payment
+// columns are left out of the table, the CSV and the printout.
 
 const REFRESH_MS = 60 * 1000;
 
@@ -26,7 +30,10 @@ function rangeFor(preset, from, to) {
   return [today, addDays(today, 1)];
 }
 
-export default function DispatchReport() {
+// Columns (by position in ALL_HEADERS) left out when hideMoney is on.
+const MONEY_OR_CONTACT = new Set([7, 8, 9, 10, 11]);
+
+export default function DispatchReport({ hideMoney = false }) {
   const [preset, setPreset] = useState("today");
   const [from, setFrom] = useState(toInput(new Date()));
   const [to, setTo] = useState(toInput(new Date()));
@@ -83,8 +90,10 @@ export default function DispatchReport() {
     : preset === "yesterday" ? `Yesterday, ${formatDate(start)}`
     : `${formatDate(start)} – ${formatDate(addDays(end, -1))}`;
 
-  const HEADERS = ["Box", "Order No", "Order details", "Order date", "Delivery date", "Dispatched", "Name", "Delivery address", "Pincode", "Box value", "To collect", "Mode of payment", "Courier / AWB"];
-  const cells = (r) => [
+  const ALL_HEADERS = ["Box", "Order No", "Order details", "Order date", "Delivery date", "Dispatched", "Name", "Delivery address", "Pincode", "Box value", "To collect", "Mode of payment", "Courier / AWB"];
+  const keep = (_, i) => !hideMoney || !MONEY_OR_CONTACT.has(i);
+  const HEADERS = ALL_HEADERS.filter(keep);
+  const allCells = (r) => [
     r.box + (r.part ? ` (${r.part})` : ""),
     r.orderNo,
     `${r.products.join("; ")}${r.pieces.length ? ` — ${r.pieces.length} piece${r.pieces.length === 1 ? "" : "s"}` : ""}`,
@@ -99,6 +108,7 @@ export default function DispatchReport() {
     r.paymentMode,
     [r.courier, r.awb].filter(Boolean).join(" · "),
   ];
+  const cells = (r) => allCells(r).filter(keep);
 
   const exportCsv = () => downloadCsv({
     filename: `dispatch_report_${toInput(start)}`,
@@ -122,8 +132,8 @@ export default function DispatchReport() {
 <h1>Sheetal Batra — Dispatch report</h1>
 <div class="meta">${esc(periodText)} · ${totals.boxes} box${totals.boxes === 1 ? "" : "es"} · ${totals.orders} order${totals.orders === 1 ? "" : "s"}${channel !== "all" ? ` · ${esc(channel)}` : ""}${courier !== "all" ? ` · ${esc(courier)}` : ""} · printed ${esc(new Date().toLocaleString("en-IN"))}</div>
 <table><thead><tr>${HEADERS.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>
-${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${i === 9 || i === 10 ? ' class="n"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("\n")}
-</tbody><tfoot><tr><td colspan="9">Total</td><td class="n">${esc(money(totals.value))}</td><td class="n">${esc(money(totals.collect))}</td><td colspan="2"></td></tr></tfoot></table>
+${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${!hideMoney && (i === 9 || i === 10) ? ' class="n"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("\n")}
+</tbody>${hideMoney ? "" : `<tfoot><tr><td colspan="9">Total</td><td class="n">${esc(money(totals.value))}</td><td class="n">${esc(money(totals.collect))}</td><td colspan="2"></td></tr></tfoot>`}</table>
 <script>window.onload = function () { window.print(); };</script>
 </body></html>`);
     w.document.close();
@@ -153,7 +163,7 @@ ${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${i === 9 || i === 10 ? ' c
             <option value="all">All couriers</option>
             {couriers.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <input type="search" placeholder="Order no, box, name, pincode, AWB…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input type="search" placeholder={hideMoney ? "Order no, box, name, AWB…" : "Order no, box, name, pincode, AWB…"} value={q} onChange={(e) => setQ(e.target.value)} />
           <button type="button" onClick={() => load()} disabled={loading}>Refresh</button>
           <button type="button" onClick={exportCsv} disabled={!shown.length}>⬇ CSV</button>
           <button type="button" className="primary" onClick={print} disabled={!shown.length}>🖨 Print</button>
@@ -163,8 +173,8 @@ ${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${i === 9 || i === 10 ? ' c
       <div className="dr-summary">
         <span><b>{totals.boxes}</b> box{totals.boxes === 1 ? "" : "es"}</span>
         <span><b>{totals.orders}</b> order{totals.orders === 1 ? "" : "s"}</span>
-        <span>Box value <b>{money(totals.value)}</b></span>
-        <span>To collect <b>{money(totals.collect)}</b></span>
+        {!hideMoney && <span>Box value <b>{money(totals.value)}</b></span>}
+        {!hideMoney && <span>To collect <b>{money(totals.collect)}</b></span>}
         <span className="dr-muted">{periodText}{updatedAt ? ` · updated ${time(updatedAt)} (auto every minute)` : ""}</span>
       </div>
 
@@ -187,12 +197,12 @@ ${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${i === 9 || i === 10 ? ' c
                   <td>{r.orderDate ? formatDate(r.orderDate) : "—"}</td>
                   <td>{r.deliveryDate ? formatDate(r.deliveryDate) : "—"}</td>
                   <td>{r.dispatchedAt ? <>{formatDate(r.dispatchedAt)}<div className="dr-muted">{time(r.dispatchedAt)}</div></> : "—"}</td>
-                  <td>{r.name || "—"}{r.phone && <div className="dr-muted">{r.phone}</div>}</td>
-                  <td>{r.address || "—"}{r.modeOfDelivery && <div className="dr-muted">{r.modeOfDelivery}</div>}</td>
-                  <td>{r.pincode || "—"}</td>
-                  <td className="dr-num">{money(r.boxValue)}</td>
-                  <td className={`dr-num ${r.toCollect > 0 ? "dr-due" : ""}`}>{money(r.toCollect)}</td>
-                  <td>{r.paymentMode || "—"}</td>
+                  <td>{r.name || "—"}{!hideMoney && r.phone && <div className="dr-muted">{r.phone}</div>}{hideMoney && r.modeOfDelivery && <div className="dr-muted">{r.modeOfDelivery}</div>}</td>
+                  {!hideMoney && <td>{r.address || "—"}{r.modeOfDelivery && <div className="dr-muted">{r.modeOfDelivery}</div>}</td>}
+                  {!hideMoney && <td>{r.pincode || "—"}</td>}
+                  {!hideMoney && <td className="dr-num">{money(r.boxValue)}</td>}
+                  {!hideMoney && <td className={`dr-num ${r.toCollect > 0 ? "dr-due" : ""}`}>{money(r.toCollect)}</td>}
+                  {!hideMoney && <td>{r.paymentMode || "—"}</td>}
                   <td>{r.courier || "—"}{r.awb && <div className="dr-muted dr-mono">{r.awb}</div>}</td>
                 </tr>
               ))}

@@ -45,7 +45,9 @@ function Breakdown({ title, items, total, limit = 8 }) {
   );
 }
 
-export default function CancellationsPanel() {
+// hideMoney: production dashboards show no money; the value tile, column and
+// CSV field are left out. Off by default, so the COO view is unchanged.
+export default function CancellationsPanel({ hideMoney = false } = {}) {
   const [preset, setPreset] = useState("month");
   const [from, setFrom] = useState(toInput(new Date()));
   const [to, setTo] = useState(toInput(new Date()));
@@ -94,10 +96,10 @@ export default function CancellationsPanel() {
 
   const exportCsv = () => downloadCsv({
     filename: `cancellations_${toInput(start)}`,
-    headers: ["Order No", "Channel", "Customer", "Products", "Ordered", "Cancelled", "Value", "Reason", "Stage when cancelled", "Cancelled by", "Salesperson"],
+    headers: ["Order No", "Channel", "Customer", "Products", "Ordered", "Cancelled", ...(hideMoney ? [] : ["Value"]), "Reason", "Stage when cancelled", "Cancelled by", "Salesperson"],
     rows: shownRows.map((r) => [r.orderNo, r.channel, r.customer, r.products.join("; "),
       r.orderedAt ? formatDate(r.orderedAt) : "", r.cancelledAt ? formatDate(r.cancelledAt) : "",
-      Math.round(r.value), r.reason, r.stage, r.cancelledBy, r.salesperson]),
+      ...(hideMoney ? [] : [Math.round(r.value)]), r.reason, r.stage, r.cancelledBy, r.salesperson]),
   });
 
   return (
@@ -134,11 +136,11 @@ export default function CancellationsPanel() {
               <span className="cx-kpi-val">{s.count}</span>
               <span className={`cx-delta ${dCount > 0 ? "up" : dCount < 0 ? "down" : ""}`}>{dCount == null ? `previous period ${s.prevCount}` : `${dCount > 0 ? "+" : ""}${dCount}% vs previous (${s.prevCount})`}</span>
             </div>
-            <div className="cx-kpi">
+            {!hideMoney && <div className="cx-kpi">
               <span className="cx-kpi-label">Value cancelled</span>
               <span className="cx-kpi-val">{money(s.value)}</span>
               <span className={`cx-delta ${dValue > 0 ? "up" : dValue < 0 ? "down" : ""}`}>{dValue == null ? `previous period ${money(s.prevValue)}` : `${dValue > 0 ? "+" : ""}${dValue}% vs previous (${money(s.prevValue)})`}</span>
-            </div>
+            </div>}
             <div className="cx-kpi">
               <span className="cx-kpi-label">Cancelled after production started</span>
               <span className="cx-kpi-val">{s.byStage.filter((x) => x.key !== "Before production" && x.key !== "No pieces").reduce((a, x) => a + x.count, 0)}</span>
@@ -151,7 +153,7 @@ export default function CancellationsPanel() {
             {s.trend.length === 0 ? <div className="cx-muted">No cancellations in this period.</div> : (
               <div className="cx-trend">
                 {s.trend.map((t) => (
-                  <div key={t.key} className="cx-trend-col" title={`${t.count} · ${money(t.value)}`}>
+                  <div key={t.key} className="cx-trend-col" title={hideMoney ? `${t.count}` : `${t.count} · ${money(t.value)}`}>
                     <span className="cx-trend-num">{t.count}</span>
                     <span className="cx-trend-bar" style={{ height: `${(t.count / trendMax) * 100}%` }} />
                     <span className="cx-trend-label">{grain === "month" ? t.key : formatDate(t.key).slice(0, 5)}</span>
@@ -173,7 +175,7 @@ export default function CancellationsPanel() {
             {shownRows.length === 0 ? <div className="cx-muted">None.</div> : (
               <div className="cx-table-wrap">
                 <table className="cx-table">
-                  <thead><tr><th>Order No</th><th>Customer</th><th>Ordered</th><th>Cancelled</th><th>Value</th><th>Reason</th><th>Stage</th><th>By</th></tr></thead>
+                  <thead><tr><th>Order No</th><th>Customer</th><th>Ordered</th><th>Cancelled</th>{!hideMoney && <th>Value</th>}<th>Reason</th><th>Stage</th><th>By</th></tr></thead>
                   <tbody>
                     {(showAll ? shownRows : shownRows.slice(0, 50)).map((r) => (
                       <tr key={r.id}>
@@ -181,7 +183,7 @@ export default function CancellationsPanel() {
                         <td>{r.customer || "—"}{r.products.length > 0 && <div className="cx-muted">{r.products.join("; ")}</div>}</td>
                         <td>{r.orderedAt ? formatDate(r.orderedAt) : "—"}</td>
                         <td>{r.cancelledAt ? formatDate(r.cancelledAt) : "—"}</td>
-                        <td className="cx-num">{money(r.value)}</td>
+                        {!hideMoney && <td className="cx-num">{money(r.value)}</td>}
                         <td>{r.reason || "—"}</td>
                         <td>{r.stage}</td>
                         <td>{r.cancelledBy || "—"}</td>
