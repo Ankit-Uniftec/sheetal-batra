@@ -20,6 +20,7 @@ const COLS = [
   { key: "order", label: "Order", level: "order" },
   { key: "product", label: "Product", level: "item" },
   { key: "status", label: "Status", level: "order", info: "Where the order stands, worked out from its pieces." },
+  { key: "ordered", label: "Order Date", level: "order" },
   { key: "due", label: "Due Date", level: "order", info: "The warehouse date: two days before the client's delivery date (the real date when the order had less than two days to run)." },
   { key: "done", label: "Pieces Done", level: "order", info: "Pieces finished out of all the order's pieces." },
   { key: "now", label: "Pieces Status", level: "order", info: "Each piece of the order and the stage it is at right now." },
@@ -34,7 +35,6 @@ const COLS = [
   { key: "client", label: "Client", level: "order" },
   { key: "po", label: "PO No", level: "order" },
   { key: "sales", label: "Salesperson", level: "order" },
-  { key: "ordered", label: "Order Date", level: "order" },
 ];
 const ITEM_COLS = COLS.filter((c) => c.level === "item").length;
 const MAX_PRODUCTS = 3;

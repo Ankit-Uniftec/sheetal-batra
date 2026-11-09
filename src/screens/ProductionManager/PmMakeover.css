@@ -474,3 +474,9 @@
 .ceo.pm .pm-classic .ev-row-configured { background: #fbfaf6; }
 .ceo.pm .pm-classic .cx-presets button, .ceo.pm .pm-classic .cx-presets select { white-space: nowrap; min-height: 36px; }
 .ceo.pm .pm-classic .cx-toolbar { gap: 10px; flex-wrap: wrap; }
+
+/* Orders table: a soft outer frame around the whole table. */
+.ceo.pm .pmo-wrap { border: 1px solid #e6dcc3; border-radius: 14px; background: #fff; }
+.ceo.pm .pmo-table th:first-child { border-radius: 13px 0 0 0; }
+.ceo.pm .pmo-table th:last-child { border-radius: 0 13px 0 0; }
+.ceo.pm .pmo-table tbody:last-child tr:last-child td { border-bottom: 0; }
