@@ -25,7 +25,8 @@ const SCANNED_FILES = [
   "src/screens/ProductionManager/PmVendors.jsx", "src/screens/ProductionManager/PmDispatch.jsx",
   "src/screens/ProductionManager/PmPeople.jsx", "src/screens/ProductionManager/PmApprovals.jsx",
   "src/screens/ProductionManager/PmMore.jsx", "src/screens/ProductionManager/PmBriefing.jsx",
-  "src/screens/ProductionManager/PmStock.jsx", "src/screens/ProductionManager/PmOrderRows.jsx", "src/screens/ProductionManager/PmRecords.jsx", "src/screens/ProductionManager/PmVendorTools.jsx", "src/screens/ProductionManager/PmOverrides.jsx",
+  "src/screens/ProductionManager/PmStock.jsx", "src/screens/ProductionManager/PmOrderRows.jsx", "src/screens/ProductionManager/PmRecords.jsx", "src/screens/ProductionManager/PmVendorTools.jsx", "src/screens/ProductionManager/PmOverrides.jsx", "src/screens/ProductionManager/PmStockPools.jsx",
+  "src/screens/ProductionManager/PmSales.jsx",
 ];
 
 // Named in those files but deliberately NOT loaded (only mentioned in comments
@@ -59,7 +60,7 @@ test("every order column the new Production Manager dashboard reads is loaded", 
   const words = new Set();
   NEW_DASHBOARD_FILES.forEach((f) => {
     const src = fs.readFileSync(path.join(process.cwd(), f), "utf8");
-    (src.match(/[a-z][a-z0-9_]*/g) || []).forEach((w) => words.add(w));
+    (src.match(/\b[a-z][a-z0-9_]*\b/g) || []).forEach((w) => words.add(w));
   });
   const referenced = ALL_ORDER_COLUMNS.filter((c) => words.has(c) && !NEVER_LOADED.has(c) && !NEVER_IN_NEW.includes(c));
   expect(referenced.filter((c) => !PM_LIST_COLUMNS.includes(c))).toEqual([]);

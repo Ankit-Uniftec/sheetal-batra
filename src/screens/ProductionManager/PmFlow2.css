@@ -1,0 +1,37 @@
+/* ============================================================
+   Floor & Flow and Dispatch & Delivery: the added figures (late orders by
+   stage, the floor by channel, partly ready, delivery tables). Brand gold
+   only; the late tone is for small text and tags.
+   ============================================================ */
+
+/* A count in a table that opens its list. */
+.ceo.pm .pmf2-link { padding: 2px 6px; margin: -2px -6px; background: none !important; border: 0; border-radius: 6px; cursor: pointer; font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; color: #6a4f0c !important; text-decoration: underline; text-decoration-color: #cfae4e; text-underline-offset: 3px; }
+.ceo.pm .pmf2-link:hover { background: #f6eedb !important; color: #a9821f !important; }
+.ceo.pm .pmf2-link:focus-visible { outline: 2px solid #cfae4e; outline-offset: 1px; }
+.ceo.pm .pmf2-link.is-late { color: #a5553a !important; text-decoration-color: #a5553a; }
+.ceo.pm .pmf2-link.is-late:hover { background: #f7ebe4 !important; }
+
+/* Severity tags on Late Orders by Stage. */
+.ceo.pm .pmf2-sev { display: inline-block; font-style: normal; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.ceo.pm .pmf2-sev.is-act { background: #f7ebe4 !important; color: #a5553a !important; }
+.ceo.pm .pmf2-sev.is-watch { background: #e6d18f !important; color: #6a4f0c !important; }
+.ceo.pm .pmf2-sev.is-ok { background: #f6eedb !important; color: #a9821f !important; }
+
+/* The Floor by Channel: shaded cells, darker = more pieces. */
+.ceo.pm .pmf2-heat { min-width: 46px; height: 30px; padding: 0 10px; border: 0; border-radius: 7px; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; transition: filter .15s; }
+.ceo.pm .pmf2-heat:hover { filter: brightness(.94); }
+.ceo.pm .pmf2-heat:focus-visible { outline: 2px solid #6a4f0c; outline-offset: 1px; }
+.ceo.pm .pmf2-heat.is-1 { background: #e6d18f !important; color: #4a3f2c !important; }
+.ceo.pm .pmf2-heat.is-2 { background: #cfae4e !important; color: #3d3214 !important; }
+.ceo.pm .pmf2-heat.is-3 { background: #a9821f !important; color: #fff !important; }
+.ceo.pm .pmf2-heat.is-4 { background: #6a4f0c !important; color: #fff !important; }
+.ceo.pm .pmf2-heat.is-total { background: #f6eedb !important; color: #6a4f0c !important; border: 1px solid #e6d18f; }
+
+/* Extra tile rows: five or three even tiles on a wide screen. */
+@media (min-width: 1100px) {
+  .ceo.pm .pmf2-tiles.is-5 > .ceo-tile { flex-basis: calc(20% - 15px); }
+  .ceo.pm .pmf2-tiles.is-3 > .ceo-tile { flex-basis: calc(33.333% - 12px); }
+}
+
+/* A table under a chart in the same card. */
+.ceo.pm .pmf2-under { margin-top: 16px; }

@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { STAGE_GROUPS, getStageGroupKey } from "../../utils/barcodeService";
+import { STAGE_GROUPS, getStageGroupKey, getStageLabel } from "../../utils/barcodeService";
 import { Chips, Columns, Empty, FilterButton, FilterGroup, Insight, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
-import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
+import { CsvButton, FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { FloorBars, useFloor } from "./PmToday";
-import { Dots, Loading } from "./PmCommon";
+import { Dots, Loading, Table, csvFromObjects, orderStatus } from "./PmCommon";
 import {
-  DAY, FLOOR_STEPS, channelOf, dayKey, floorKey, idleDays, isRunning, isUrgent, median, pct, pieceState, plural, todayStart,
+  DAY, FLOOR_STEPS, channelOf, clientOf, dayKey, daysLeft, dueDay, fmtDate, floorKey, hasPromise, idleDays, isLate, isRemovedPiece, isRunning,
+  isUrgent, median, pct, pieceState, plural, productsOf, todayStart,
 } from "./pmModel";
+import "./PmFlow2.css";
 
 // ============================================================
 // Floor & Flow: where the pieces are, where they get held up, how fast they
@@ -32,6 +34,8 @@ const { Tile, Card } = defineKit({
     "Ageing of Running Orders": "Running orders by how many days ago they were placed. Click a bar to see the orders.",
     "Re-work by Stage": "Pieces of running orders that have been sent back at least once, by the stage they are at now. Click a stage to see the pieces.",
     "How Long Since Pieces Last Moved": "Pieces in the warehouse by days since their last scan. Pieces that have not moved for 30 days or more usually belong to orders that were made but never closed, or were forgotten. Click a bar to see the pieces.",
+    "Late Orders by Stage": "Running orders by the stage the order is at (its warehouse stage; Order Received when nothing has been scanned). Past Due counts orders whose due date (two days before the client's delivery date) has passed; website and stock orders are never counted late. Average Days at Stage runs from when the order reached its stage (from the order date when it has never been scanned). Act now: at least one order here is past due. Watch: nothing past due yet, but 3 or more orders are at this stage. OK: neither. Click a count to see the orders.",
+    "The Floor by Channel": "Pieces of running orders at each stage right now (in our warehouses and at vendors, the same pieces as The Floor Right Now), split by the channel of their order. The darker the cell, the more pieces. Click a number to see the pieces.",
   },
 });
 
@@ -39,6 +43,95 @@ const FINISH = new Set(["production_complete", "packaging_dispatch", "dispatched
 const GROUP_LABEL = Object.fromEntries(STAGE_GROUPS.map((g) => [g.key, g.label]));
 const fmtDays = (v) => (v >= 10 ? `${Math.round(v)} days` : `${v.toFixed(1)} days`);
 const groupOf = (stage) => (stage === "order_received" ? "order_received" : getStageGroupKey(stage));
+
+const SEVERITY = { act: "Act now", watch: "Watch", ok: "OK" };
+const SEV_RANK = { act: 0, watch: 1, ok: 2 };
+
+/** A count that opens its list; a plain 0 when there is nothing to open. */
+const CountLink = ({ n, late, onClick }) => (n
+  ? <button type="button" className={`pmf2-link${late ? " is-late" : ""}`} onClick={(e) => { e.stopPropagation(); onClick(); }}>{num(n)}</button>
+  : <span className="pm-muted">0</span>);
+
+/** Days since the order reached its current stage (from the order date when never scanned). */
+const orderDaysAtStage = (o, now = Date.now()) => {
+  const t = new Date(o.warehouse_stage_updated_at || o.created_at).getTime();
+  return Number.isFinite(t) ? Math.max(0, (now - t) / DAY) : null;
+};
+const orderStageKey = (o) => groupOf(o.warehouse_stage || "order_received");
+
+/** Running orders per stage: how many, how many past due, how long they have sat there. */
+function LateByStage({ ctx, running }) {
+  const rows = useMemo(() => {
+    const today = todayStart();
+    const now = Date.now();
+    const m = {};
+    STAGE_GROUPS.forEach((g) => { m[g.key] = { key: g.key, name: g.label, list: [], late: [], dwell: 0, n: 0 }; });
+    running.forEach((o) => {
+      const r = m[orderStageKey(o)];
+      if (!r) return; // disposed or an unknown stage: not a step in the flow
+      r.list.push(o);
+      if (isLate(o, today)) r.late.push(o);
+      const d = orderDaysAtStage(o, now);
+      if (d != null) { r.dwell += d; r.n += 1; }
+    });
+    return Object.values(m).filter((r) => r.list.length).map((r) => ({
+      ...r,
+      share: pct(r.late.length, r.list.length),
+      avg: r.n ? r.dwell / r.n : null,
+      sev: r.late.length ? "act" : r.list.length >= 3 ? "watch" : "ok",
+    })).sort((a, b) => SEV_RANK[a.sev] - SEV_RANK[b.sev] || b.late.length - a.late.length || b.list.length - a.list.length);
+  }, [running]);
+  return (
+    <Table rowKey={(r) => r.key} rows={rows} empty="No running orders." columns={[
+      { key: "stage", label: "Stage", render: (r) => <b>{r.name}</b> },
+      { key: "orders", label: "Orders", right: true, render: (r) => <CountLink n={r.list.length} onClick={() => ctx.openOrders({ title: `At ${r.name}`, sub: "Running orders at this stage", orders: r.list })} /> },
+      { key: "late", label: "Past Due", right: true, render: (r) => <CountLink n={r.late.length} late onClick={() => ctx.openOrders({ title: `Past Due at ${r.name}`, sub: "Running orders at this stage past their due date", orders: r.late })} /> },
+      { key: "share", label: "% Past Due", right: true, render: (r) => `${r.share}%` },
+      { key: "avg", label: "Average Days at Stage", right: true, render: (r) => (r.avg == null ? "–" : fmtDays(r.avg)) },
+      { key: "sev", label: "Severity", flow: "one", render: (r) => <i className={`pmf2-sev is-${r.sev}`}>{SEVERITY[r.sev]}</i> },
+    ]} />
+  );
+}
+
+/** Pieces at each stage split by the channel of their order, as a shaded table. */
+function ChannelStages({ ctx, pieces }) {
+  const { rows, chans, max } = useMemo(() => {
+    const totals = {};
+    const list = FLOOR_STEPS.map((g) => {
+      const here = pieces.filter((c) => floorKey(c) === g.key);
+      const by = {};
+      here.forEach((c) => {
+        const o = ctx.ordersById[c.order_id];
+        const k = o ? channelOf(o) : "Not known";
+        (by[k] || (by[k] = [])).push(c);
+        totals[k] = (totals[k] || 0) + 1;
+      });
+      return { key: g.key, name: g.label, here, by };
+    }).filter((r) => r.here.length);
+    const names = Object.entries(totals).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    const all = { key: "all", name: "All stages", here: list.flatMap((r) => r.here), by: {}, total: true };
+    names.forEach((k) => { all.by[k] = list.flatMap((r) => r.by[k] || []); });
+    const top = Math.max(1, ...list.flatMap((r) => names.map((k) => (r.by[k] || []).length)));
+    return { rows: list.length ? [...list, all] : [], chans: names, max: top };
+  }, [pieces, ctx.ordersById]);
+  if (!rows.length) return <Empty text="No pieces on the floor." />;
+  const level = (n) => (n / max > 0.75 ? 4 : n / max > 0.5 ? 3 : n / max > 0.25 ? 2 : 1);
+  const cell = (r, list, label, isTotal) => (list.length
+    ? (
+      <button type="button" className={`pmf2-heat${isTotal || r.total ? " is-total" : ` is-${level(list.length)}`}`}
+        onClick={() => ctx.openPieces({ title: r.total ? label : `${r.name}: ${label}`, sub: "Pieces of running orders on the floor", pieces: list })}>
+        {num(list.length)}
+      </button>
+    )
+    : <span className="pm-muted">–</span>);
+  return (
+    <Table rowKey={(r) => r.key} rows={rows} columns={[
+      { key: "stage", label: "Stage", render: (r) => <b>{r.name}</b> },
+      ...chans.map((k) => ({ key: `c-${k}`, label: k, right: true, render: (r) => cell(r, r.by[k] || [], k, false) })),
+      { key: "total", label: "Total", right: true, render: (r) => cell(r, r.here, r.total ? "All Pieces on the Floor" : "All channels", true) },
+    ]} />
+  );
+}
 
 /** Pieces in the warehouse past their stage limit, by stage and days over. */
 function StuckBars({ ctx, stuck }) {
@@ -220,10 +313,40 @@ export default function FloorPage({ ctx }) {
   const idle30 = idle[4].value + idle[5].value;
   const finishedPieces = flow ? flow.finishedIds.map((id) => piecesById[id]).filter(Boolean) : [];
   const loading = !flow;
+  const floorPieces = useMemo(() => [...floor.inHouse, ...floor.atVendor], [floor.inHouse, floor.atVendor]);
+
+  // Work in progress: every running order the filters keep. No money and no contact details.
+  const exportWip = () => {
+    const now = Date.now();
+    csvFromObjects("work in progress", floor.running.map((o) => {
+      const comps = componentsByOrder[o.id] || [];
+      const due = dueDay(o);
+      const left = daysLeft(o);
+      const at = orderDaysAtStage(o, now);
+      return {
+        "Order No": o.order_no || "",
+        Client: clientOf(o, ctx.vendorMap),
+        Salesperson: o.salesperson || "",
+        Store: o.salesperson_store || "",
+        Channel: channelOf(o),
+        Products: productsOf(o),
+        Pieces: comps.filter((c) => !isRemovedPiece(c)).length,
+        "Current Stage": (o.warehouse_stage && getStageLabel(o.warehouse_stage)) || o.warehouse_stage || "Order Received",
+        "Days at Stage": at == null ? "" : Math.floor(at),
+        "Order Date": fmtDate(o.created_at) || "",
+        "Due Date": due ? fmtDate(due) : "",
+        "Client Delivery Date": o.delivery_date ? fmtDate(o.delivery_date) : "",
+        "Days Late": left == null ? "No date" : !hasPromise(o) ? "Not counted" : left < 0 ? -left : 0,
+        Priority: isUrgent(o) ? "Urgent" : "Normal",
+        Status: orderStatus(o, comps),
+      };
+    }));
+  };
 
   return (
     <div className="ceo-page">
       <PageHead title="Floor & Flow" desc="Where the pieces are, where they are held up and how fast they move. Based on the live floor and the last 30 days of scans.">
+        <CsvButton label="Export work in progress" onClick={exportWip} disabled={!floor.running.length} />
         <FilterButton count={(channels.length ? 1 : 0) + (urgentOnly ? 1 : 0)} onClick={() => setDrawer(true)} />
       </PageHead>
       <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setChannels([]); setUrgentOnly(false); }}
@@ -254,10 +377,17 @@ export default function FloorPage({ ctx }) {
 
       <div className="ceo-grid">
         <Card span={7} md={12} title="The Floor Right Now" sub={`${num(floor.inHouse.length - floor.wh2.length)} at Delhi (1) · ${num(floor.wh2.length)} at Delhi (2) · ${num(floor.atVendor.length)} at outside vendors`}>
-          <FloorBars ctx={ctx} pieces={[...floor.inHouse, ...floor.atVendor]} />
+          <FloorBars ctx={ctx} pieces={floorPieces} />
         </Card>
         <Card span={5} md={12} title="Stuck by Stage" sub={`${num(floor.stuckActive.length)} pieces of active orders not moved for 7+ days`}>
           <StuckBars ctx={ctx} stuck={floor.stuckActive} />
+        </Card>
+
+        <Card span={12} title="Late Orders by Stage" sub={`${num(floor.running.length)} running orders by the stage they are at · ${num(floor.late.length)} past their due date`}>
+          <LateByStage ctx={ctx} running={floor.running} />
+        </Card>
+        <Card span={12} title="The Floor by Channel" sub="Pieces at each stage by the channel of their order. Click a number to see the pieces.">
+          <ChannelStages ctx={ctx} pieces={floorPieces} />
         </Card>
 
         <Card span={5} md={12} title="Bottlenecks" sub="Average days spent in each stage, last 30 days">

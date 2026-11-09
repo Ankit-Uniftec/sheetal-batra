@@ -258,7 +258,24 @@ export const median = (list) => {
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
-/** "SB-DLC-0726-003625" → client name, or the B2B brand. */
-export const clientOf = (o, vendorMap = {}) => o.delivery_name || (o.is_b2b && vendorMap[o.vendor_id]?.store_brand_name) || "";
+/** Who the order is for: the vendor brand for a B2B order (its delivery name
+ *  when there is no brand), the client's name for every other order. */
+export const clientOf = (o, vendorMap = {}) => (o?.is_b2b && (vendorMap || {})[o.vendor_id]?.store_brand_name) || o?.delivery_name || "";
+
+/** The order's priority level: "urgent", "high" or "normal" (empty or unknown counts as normal). */
+export const priorityOf = (o) => { const p = String(o?.priority || "").toLowerCase(); return p === "urgent" || p === "high" ? p : "normal"; };
+
+/** The website (Shopify) order number, for Shopify orders ("" otherwise). */
+export const shopifyNo = (o) => o?.shopify_order_name || (o?.shopify_order_id ? String(o.shopify_order_id) : "");
+
+/** A qc_records row that disposed (or scrapped) the piece. */
+export const isDisposalRecord = (r) => ["dispose", "scrap"].includes(String(r?.outcome || "").toLowerCase());
+/** Disposal records by order id, oldest first, from the qc_records ledger. */
+export function disposalsByOrder(qcRows) {
+  const by = {};
+  (qcRows || []).filter(isDisposalRecord).forEach((r) => { (by[r.order_id] || (by[r.order_id] = [])).push(r); });
+  Object.values(by).forEach((arr) => arr.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+  return by;
+}
 export const productsOf = (o) => (o.items || []).map((it) => it.product_name).filter(Boolean).join(", ");
 export const piecesQty = (o) => (o.items || []).reduce((s, it) => s + (Number(it.quantity) || 1), 0) || 1;

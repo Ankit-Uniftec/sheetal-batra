@@ -78,7 +78,7 @@ export function StackBars({ data, series, height = 260, format = num, onPick, st
             <Bar key={s.key} dataKey={s.key} name={s.name} stackId={stacked ? "a" : undefined} fill={s.color} maxBarSize={44}
               radius={!stacked || i === last ? [6, 6, 0, 0] : [0, 0, 0, 0]} isAnimationActive={false}
               onClick={onPick ? (bar) => onPick(bar?.payload || bar, s.key) : undefined}>
-              {series.length > 1 && <LabelList dataKey={s.key} content={inside(s.color)} />}
+              {series.length > 1 && stacked && <LabelList dataKey={s.key} content={inside(s.color)} />}
               {(!stacked || i === last) && (
                 <LabelList
                   dataKey={stacked ? (d) => series.reduce((sum, x) => sum + (Number(d[x.key]) || 0), 0) : s.key}

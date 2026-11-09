@@ -8,7 +8,7 @@ import { ListTools, Stat, defineKit, slug } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
 import {
   atVendor, channelOf, clientOf, daysAtStage, daysLeft, dueDay, hasPromise, isLate, isRunning, isUrgent, overdueDays, pieceName, pieceState, plural,
-  productsOf, stageName,
+  priorityOf, productsOf, shopifyNo, stageName,
 } from "./pmModel";
 
 /** Download a list of plain objects as CSV (the keys are the column names). */
@@ -126,16 +126,28 @@ export function piecesLine(comps = []) {
   return parts.join(" · ");
 }
 
+// A colour stored as a name or as { name, hex }.
+const colourName = (v) => (v && typeof v === "object" ? v.name : v) || "";
+const PRIORITY_WORD = { urgent: "Urgent", high: "High", normal: "Normal" };
+/** One value per product line (charges left out), joined with "; ". */
+const perProduct = (o, pick) => (o.items || []).filter((it) => it && !it.is_charge).map((it) => pick(it) || "–").join("; ");
+
 export function orderRows(orders, ctx) {
   return orders.map((o) => {
     const comps = ctx.componentsByOrder[o.id] || [];
     const d = dueDay(o);
     return {
       "Order No": o.order_no,
+      "Shopify No": shopifyNo(o),
       Channel: channelOf(o),
       Client: clientOf(o, ctx.vendorMap),
       Products: productsOf(o),
-      Priority: isUrgent(o) ? "Urgent" : "Normal",
+      "Size(s)": perProduct(o, (it) => it.size),
+      "Top Colour(s)": perProduct(o, (it) => colourName(it.top_color)),
+      "Bottom Colour(s)": perProduct(o, (it) => colourName(it.bottom_color)),
+      Salesperson: o.salesperson || "",
+      Store: o.salesperson_store || "",
+      Priority: PRIORITY_WORD[priorityOf(o)],
       Status: orderStatus(o, comps),
       Pieces: piecesLine(comps),
       "Order Date": formatDate(o.created_at),

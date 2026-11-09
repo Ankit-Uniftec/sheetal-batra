@@ -3,6 +3,7 @@ import { fmtDate as formatDate } from "./pmModel";
 import { Columns, Empty, Icon, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
 import { Card, Dots, Loading, orderColumns, Table, Tile } from "./PmCommon";
 import { ActionsCard, BriefingCard, useInsights } from "./PmBriefing";
+import { OrderTotals, TopSellers } from "./PmSales";
 import {
   FLOOR_STEPS, atVendor, atWh2, channelOf, dayKey, daysLeft, floorKey, hasPromise, isDormant, isLate, isOwnTrip, isRunning, isStuck, isUrgent, pct, pieceState,
   plural, todayStart,
@@ -297,6 +298,10 @@ export default function TodayPage({ ctx }) {
           {dueWeek.length > 8 && <button type="button" className="ceo-link pm-more" onClick={() => openOrders({ title: "Due This Week", sub: "Due in the next 7 days, still in production", orders: dueWeek })}>See all {num(dueWeek.length)}<Icon name="chevron" /></button>}
         </Card>
       </div>
+
+      <OrderTotals ctx={ctx}>
+        <TopSellers ctx={ctx} />
+      </OrderTotals>
       <p className="pm-foot-note">Due dates are the warehouse date, two days before the client's delivery date. Website and stock orders are not counted as late. {ctx.syncedAt ? `Data from ${ctx.syncedAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}; use Refresh in the menu for the latest.` : ""}</p>
     </div>
   );

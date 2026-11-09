@@ -6,6 +6,7 @@ import { Chips, Columns, Drawer, Empty, FilterGroup, Insight, PageHead, Pager, R
 import { CsvButton, FilterDrawer, ListTools, Stat, defineKit } from "../CeoDashboard/dashKit";
 import { csvFromObjects, Loading } from "./PmCommon";
 import { FloorBars } from "./PmToday";
+import { StockPools } from "./PmStockPools";
 import { isDormant, isRunning, pieceState, plural } from "./pmModel";
 
 // ============================================================
@@ -246,6 +247,8 @@ export default function StockPage({ ctx }) {
             ]} />
           )}
         </Card>
+
+        <StockPools ctx={ctx} />
       </div>
 
       <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setLevel(""); setType(""); setSortBy("most"); setMakingF(""); }} count={list.length} noun="designs" sub="Narrow the designs in stock">

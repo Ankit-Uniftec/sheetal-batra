@@ -34,6 +34,8 @@ import { DEFAULT_PERIOD, PM_PERIODS, pmPeriod } from "./pmPeriod";
 import { PmCancelModal, PmEditOrderModal, PmPriorityModal } from "./PmModals";
 import { HalfMadeButton, PmCompletePicker } from "./PmPicker";
 import { PhotoView, PieceRow, useColourHex } from "./PmOrderRows";
+import { DisposedStrip } from "./PmOrderRows";
+import { isDisposalRecord, priorityOf, shopifyNo } from "./pmModel";
 import TodayPage from "./PmToday";
 import OrdersPage from "./PmOrders";
 import FloorPage from "./PmFloor";
@@ -735,6 +737,13 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
   const busy = (k) => actions.busy === `${o.id}-${k}`;
   const canAct = running && String(o.status || "").toLowerCase() !== "cancelled";
   const who = clientOf(o, ctx.vendorMap);
+  // Why pieces were disposed, from the QC ledger (loaded once, then kept).
+  const { need } = ctx;
+  useEffect(() => { need("qcAll"); }, [need]);
+  const qcRows = ctx.lazy?.qcAll?.rows;
+  const disposed = useMemo(() => (qcRows || []).filter((r) => r.order_id === o.id && isDisposalRecord(r))
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)), [qcRows, o.id]);
+  const level = priorityOf(o);
   return (
     <Drawer wide title={o.order_no} sub={[who, channelOf(o)].filter(Boolean).join(" · ")} onClose={onClose} onBack={onBack}>
       <div className="pm-od">
@@ -775,11 +784,12 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
       <div className="pm-od-details">
         {[
           ["Channel", channelOf(o)],
+          ["Shopify No", shopifyNo(o)],
           ["Client", who],
           ["Order Date", formatDate(o.created_at)],
           ["Client Delivery Date", o.delivery_date ? formatDate(o.delivery_date) : null],
           ["Delivery Mode", o.mode_of_delivery],
-          ["Priority", isUrgent(o) ? "Urgent" : "Normal"],
+          ["Priority", level === "urgent" ? "Urgent" : level === "high" ? "High" : "Normal"],
           ["Salesperson", o.salesperson],
           ["PO Number", o.po_number],
           ["Pieces", piecesLine(comps)],
@@ -787,6 +797,13 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
         {o.notes && <div className="pm-od-item is-wide"><span>Production Notes</span><b>{o.notes}</b></div>}
         {o.cancellation_reason && <div className="pm-od-item is-wide"><span>Cancellation Reason</span><b>{o.cancellation_reason}</b></div>}
       </div>
+
+      {disposed.length > 0 && (
+        <>
+          <p className="pm-dsection">Why Pieces Were Disposed</p>
+          <DisposedStrip records={disposed} comps={comps} className="is-panel" />
+        </>
+      )}
 
       <p className="pm-dsection">Products</p>
       <small className="pm-od-hint">Click a piece to open its journey.</small>

@@ -4,9 +4,11 @@ import { fmtDate as formatDate } from "./pmModel";
 import { supabase } from "../../lib/supabaseClient";
 import { getItemCategory } from "../../utils/itemCategory";
 import { Empty, Icon, InfoTip, Thumb } from "../CeoDashboard/CeoUi";
+import { whichQcLabel } from "../../utils/qcHistory";
 import { orderStatus } from "./PmCommon";
+import { HalfMadeButton } from "./PmPicker";
 import {
-  channelOf, clientOf, daysLeft, dueDay, hasPromise, isDormant, isLate, isRunning, isUrgent, pieceState, plural, stageName,
+  channelOf, clientOf, daysLeft, dueDay, hasPromise, isDormant, isLate, isRunning, isUrgent, pieceName, pieceState, plural, priorityOf, shopifyNo, stageName,
 } from "./pmModel";
 
 // ============================================================
@@ -179,6 +181,29 @@ export function PhotoView({ photo, onClose }) {
   );
 }
 
+/** Why pieces of an order were disposed: one line per disposal in the QC ledger,
+ *  with where the piece is now when it was restarted. Nothing when there are none. */
+export function DisposedStrip({ records, comps = [], className = "" }) {
+  if (!records?.length) return null;
+  return (
+    <div className={`pmd-strip ${className}`.trim()}>
+      {records.map((r) => {
+        const c = comps.find((x) => x.id === r.component_id);
+        const back = c && !["disposed", "scrapped"].includes(c.current_stage) && !c.cancelled_at;
+        return (
+          <div key={r.id} className="pmd-line">
+            <b>{c ? pieceName(c) : "Piece"}</b>
+            {(c?.barcode || r.barcode) && <small className="pm-code">{c?.barcode || r.barcode}</small>}
+            <span>{`Disposed at ${whichQcLabel(r.which_qc)}`}</span>
+            {r.fail_reason && <span className="pmd-reason">{r.fail_reason}</span>}
+            {back && <span className="pmd-back">{`restarted, now at ${stageName(c)}`}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** A label over a value, for the card header. */
 const HeadItem = ({ label, children, sub, tone }) => (
   <div className="pmc-hitem">
@@ -188,7 +213,7 @@ const HeadItem = ({ label, children, sub, tone }) => (
   </div>
 );
 
-export default function OrderRows({ ctx, rows }) {
+export default function OrderRows({ ctx, rows, disposals = {} }) {
   const { componentsByOrder, actions } = ctx;
   const hexOf = useColourHex();
   const [photo, setPhoto] = useState(null); // { src, name } shown large
@@ -217,6 +242,9 @@ export default function OrderRows({ ctx, rows }) {
         const dueTone = late ? "late" : running && hasPromise(o) && left != null && left <= 2 ? "soon" : null;
         const open = () => ctx.openOrder(o);
         const client = clientOf(o, ctx.vendorMap);
+        const level = priorityOf(o);
+        const shop = shopifyNo(o);
+        const halfMadeFor = ctx.halfMade?.byOrder?.[o.id];
         // Each product's pieces (pieces of products past the third go with the last one shown).
         const lastShown = shownItems.length - 1;
         const piecesOf = (i) => comps.filter((c) => Math.min(c.item_index ?? 0, lastShown) === i);
@@ -225,6 +253,7 @@ export default function OrderRows({ ctx, rows }) {
             onKeyDown={(e) => { if (e.key === "Enter") open(); }} aria-label={`Order ${o.order_no}`}>
             <header className="pmc-head">
               <HeadItem label="Order No" sub={channelOf(o)}>{o.order_no}</HeadItem>
+              {shop && <HeadItem label="Shopify No">{shop}</HeadItem>}
               <HeadItem label="Order Date" sub={ageDays === 0 ? "Today" : `${plural(ageDays, "day")} ago`}>{formatDate(o.created_at)}</HeadItem>
               <HeadItem label={<InfoTip text="The warehouse date: two days before the client's delivery date.">Due Date</InfoTip>} sub={dueNote} tone={dueTone}>{dueDay(o) ? formatDate(dueDay(o)) : "–"}</HeadItem>
               <HeadItem label="Delivery">{o.delivery_date ? formatDate(o.delivery_date) : "–"}</HeadItem>
@@ -233,7 +262,8 @@ export default function OrderRows({ ctx, rows }) {
               {o.po_number && <HeadItem label="PO No">{o.po_number}</HeadItem>}
               <div className="pmc-tags">
                 <b className={`pmo-pill is-${status.toLowerCase().replace(/\s+/g, "-")}`}>{status}</b>
-                {isUrgent(o) && <i className="pm-tag is-urgent">Urgent</i>}
+                {level === "urgent" && <i className="pm-tag is-urgent">Urgent</i>}
+                {level === "high" && <i className="pm-tag is-soft">High</i>}
                 {late && <i className="pm-tag is-urgent">Late</i>}
                 {quiet && <i className="pm-tag">Quiet 30+ days</i>}
                 {o.is_alteration && <i className="pm-tag">Alteration</i>}
@@ -266,6 +296,7 @@ export default function OrderRows({ ctx, rows }) {
                   </div>
                 ))}
                 {items.length > MAX_PRODUCTS && <p className="pmc-more">+{plural(items.length - MAX_PRODUCTS, "more product")} · open the order to see all</p>}
+                <DisposedStrip records={disposals[o.id]} comps={comps} />
               </div>
 
             </div>
@@ -282,6 +313,11 @@ export default function OrderRows({ ctx, rows }) {
                 {o.notes ? <span className="pmc-note" title={o.notes}>Note: <b>{o.notes}</b></span> : null}
               </span>
               <span className="pmo-btns pmc-actions" onClick={(e) => e.stopPropagation()} role="presentation">
+                {halfMadeFor?.length > 0 && (
+                  <span className="pmd-halfmade" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} role="presentation">
+                    <HalfMadeButton order={o} suggestions={halfMadeFor} by={ctx.halfMade.me?.email} onUsed={ctx.halfMade.reload} />
+                  </span>
+                )}
                 <button type="button" className="ceo-btn is-small" onClick={stop(() => ctx.openJourney(o))} disabled={!comps.length}><Icon name="movements" />View Journey</button>
                 <button type="button" className="ceo-btn is-small" onClick={stop(() => actions.warehousePdf(o))} disabled={busy("pdf")}><Icon name="download" />{busy("pdf") ? "Opening" : "Warehouse PDF"}</button>
                 <RowMenu items={[
