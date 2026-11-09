@@ -503,3 +503,9 @@
 .ceo.pm .ceo-table-wrap .ceo-table th:first-child { border-radius: 13px 0 0 0; }
 .ceo.pm .ceo-table-wrap .ceo-table th:last-child { border-radius: 0 13px 0 0; }
 .ceo.pm .ceo-table-wrap .ceo-table tbody tr:last-child td { border-bottom: 0; }
+
+/* Filters that open inside a side panel, under its toolbar. */
+.ceo.pm .pm-inline-filters { display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid #e6dcc3; border-radius: 14px; background: #fcfaf5; }
+.ceo.pm .pm-inline-foot { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.ceo.pm .pm-period-note { margin: 4px 0 0; font-size: 13px; color: #7a7466 !important; }
+.ceo.pm .pm-period-note b { color: #3b3528 !important; }

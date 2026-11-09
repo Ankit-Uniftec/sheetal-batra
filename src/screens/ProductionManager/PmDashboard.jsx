@@ -24,16 +24,17 @@ import { loadLedger, loadSales, loadStockOrders, loadStockRoomCatalogue } from "
 import { getStagesOutsideLabel } from "../../utils/barcodeService";
 import { fetchAllRowsParallel } from "../../utils/fetchAllRowsParallel";
 import Logo from "../../images/logo.png";
-import { CalendarIcon, Drawer, GlobalSearch, Icon, MenuIcon, Thumb, num } from "../CeoDashboard/CeoUi";
+import { CalendarIcon, Chips, DateRange, Drawer, FilterGroup, GlobalSearch, Icon, MenuIcon, Thumb, num } from "../CeoDashboard/CeoUi";
 import { Stat } from "../CeoDashboard/dashKit";
 import "../CeoDashboard/CeoMakeover.css";
 import "../GMDashboard/GmMakeover.css";
 import "./PmMakeover.css";
 import {
-  channelOf, clientOf, daysLeft, dueDay, groupPieces, isLate, isRunning, isUrgent, loadOrderPieces, loadPmCore, loadQc, loadScans,
+  channelOf, clientOf, dayKey, daysLeft, dueDay, groupPieces, isLate, isRunning, isUrgent, loadOrderPieces, loadPmCore, loadQc, loadScans,
   atVendor, isOwnTrip, loadDispatchScans, loadWaiting, pieceName, pieceState, plural,
 } from "./pmModel";
 import { OrdersTable, PiecesTable, orderStatus, piecesLine } from "./PmCommon";
+import { DEFAULT_PERIOD, PM_PERIODS, pmPeriod } from "./pmPeriod";
 import { PmCancelModal, PmEditOrderModal, PmPriorityModal } from "./PmModals";
 import TodayPage from "./PmToday";
 import OrdersPage from "./PmOrders";
@@ -122,6 +123,24 @@ const LOADERS = {
   },
 };
 
+// Scans, QC checks and dispatch scans for any number of days back, asked for
+// by the date range ("qc180", "scans90", "dispatch400").
+const loaderFor = (key) => {
+  if (LOADERS[key]) return LOADERS[key];
+  const m = String(key).match(/^(scans|qc|dispatch)(\d+)$/);
+  if (!m) return null;
+  const days = Number(m[2]);
+  return m[1] === "scans" ? () => loadScans(days) : m[1] === "qc" ? () => loadQc(days) : () => loadDispatchScans(days);
+};
+
+// The pages that report on the header's date range.
+const PERIOD_TABS = ["quality", "vendors", "dispatch", "people"];
+const PERIOD_KEY = "sb-pm-period";
+const readPeriod = () => {
+  try { const v = JSON.parse(sessionStorage.getItem(PERIOD_KEY) || "null"); if (v && v.key) return v; } catch { /* nothing saved */ }
+  return { key: DEFAULT_PERIOD, from: "", to: "" };
+};
+
 export default function PmDashboard() {
   const navigate = useNavigate();
   const { showPopup, PopupComponent } = usePopup();
@@ -152,6 +171,15 @@ export default function PmDashboard() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [ordersTab, setOrdersTab] = useState(null);  // a tab the Orders page should open on
   const [stockFocus, setStockFocus] = useState(null); // a design the Stock page should open
+  // The header's date range, kept for this browser tab.
+  const [periodSel, setPeriodSel] = useState(readPeriod);
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const period = useMemo(() => pmPeriod(periodSel.key, periodSel.from, periodSel.to), [periodSel]);
+  const pickPeriod = (next) => {
+    const v = { ...periodSel, ...next };
+    setPeriodSel(v);
+    try { sessionStorage.setItem(PERIOD_KEY, JSON.stringify(v)); } catch { /* storage blocked */ }
+  };
   // Old links to Approvals, Overrides or Profile open their panel over Today;
   // an old Cancellations link opens Orders on the Cancelled tab.
   useEffect(() => {
@@ -220,10 +248,11 @@ export default function PmDashboard() {
 
   /** Ask for a slower data set once; pages read it from ctx.lazy[key]. Saved rows stay on screen while it reloads. */
   const need = useCallback((key) => {
-    if (started.current[key] || !LOADERS[key]) return;
+    const load = loaderFor(key);
+    if (started.current[key] || !load) return;
     started.current[key] = true;
     setLazy((s) => ({ ...s, [key]: { loading: true, rows: s[key]?.rows ?? null } }));
-    LOADERS[key]()
+    load()
       .then((rows) => setLazy((s) => ({ ...s, [key]: { loading: false, rows } })))
       .catch((err) => {
         console.error(`Loading ${key} failed:`, err);
@@ -369,7 +398,7 @@ export default function PmDashboard() {
   const pages = NAV.flatMap((g) => g.items);
   const ctx = {
     profile, email: profile?.email || "", orders, ordersById, components, componentsByOrder, piecesById, vendorMap, halfMade,
-    lazy, need, syncedAt,
+    lazy, need, syncedAt, period,
     openOrder, openOrders, openPieces, go, openJourney, showPopup, navigate, ordersTab, setOrdersTab, stockFocus, setStockFocus,
     openRequests,
     openOverrideLog: (order) => setOverrideLog(order),
@@ -506,10 +535,14 @@ export default function PmDashboard() {
               placeholder="Search orders, clients, products, barcodes, vendors, people…"
               onPage={go} onOrder={openOrder} onClient={() => {}} onDesign={() => {}}
             />
+            {PERIOD_TABS.includes(activeTab) && (
+              <button type="button" className="ceo-view" onClick={() => setPeriodOpen(true)}>
+                <CalendarIcon />
+                <b>{period.label}</b>
+                <span>Date range</span>
+              </button>
+            )}
             <div className="ceo-top-end">
-              <span className="gm-top-actions">
-                <button type="button" className="ceo-btn" onClick={() => setRequests({ view: "overrides" })} aria-label="Requests and overrides"><Icon name="edit" /><span>Requests &amp; Overrides</span>{waitingCount > 0 && <b className="pm-top-count">{num(waitingCount)}</b>}</button>
-              </span>
               {(stale || refreshing) && <span className="pm-updating" role="status"><i />Updating</span>}
               <NotificationBell userEmail={profile?.email} look="soft" onOrderClick={(id) => { const o = ordersById[id]; if (o) openOrder(o); }} />
             </div>
@@ -549,12 +582,12 @@ export default function PmDashboard() {
 
         {top && top.type === "orders" && (
           <Drawer wide title={top.title} sub={top.sub} onClose={closeAll} onBack={back}>
-            <OrdersTable ctx={ctx} title={top.title} orders={top.ids.map((id) => ordersById[id]).filter(Boolean)} />
+            <OrdersTable key={`${stack.length}${top.title}`} ctx={ctx} title={top.title} orders={top.ids.map((id) => ordersById[id]).filter(Boolean)} />
           </Drawer>
         )}
         {top && top.type === "pieces" && (
           <Drawer wide title={top.title} sub={top.sub} onClose={closeAll} onBack={back}>
-            <PiecesTable ctx={ctx} title={top.title} pieces={top.ids.map((id) => piecesById[id]).filter(Boolean)} />
+            <PiecesTable key={`${stack.length}${top.title}`} ctx={ctx} title={top.title} pieces={top.ids.map((id) => piecesById[id]).filter(Boolean)} />
           </Drawer>
         )}
         {top && top.type === "order" && ordersById[top.id] && (
@@ -573,6 +606,36 @@ export default function PmDashboard() {
         {overrideLog && (
           <Drawer wide title="Override History" sub={`Every override recorded on ${overrideLog.order_no}`} onClose={() => setOverrideLog(null)}>
             <div className="pm-classic ceo-keep"><OverrideHistory title="Overrides on this order" initialSearch={overrideLog.order_no} /></div>
+          </Drawer>
+        )}
+        {periodOpen && (
+          <Drawer
+            title="Date Range"
+            sub="Quality, Vendors, Dispatch & Delivery and People all show this range"
+            onClose={() => setPeriodOpen(false)}
+            footer={(
+              <>
+                <button type="button" className="ceo-btn" onClick={() => pickPeriod({ key: DEFAULT_PERIOD, from: "", to: "" })}>Reset</button>
+                <button type="button" className="ceo-btn is-primary" onClick={() => setPeriodOpen(false)}>Done</button>
+              </>
+            )}
+          >
+            <FilterGroup label="Show">
+              <Chips
+                options={PM_PERIODS}
+                value={periodSel.key}
+                onChange={(v) => (v === "custom"
+                  // Choosing dates starts from the range on screen, so the pages do not jump.
+                  ? pickPeriod({ key: "custom", from: dayKey(period.start), to: dayKey(new Date(period.end.getTime() - 1)) })
+                  : pickPeriod({ key: v || DEFAULT_PERIOD }))}
+              />
+            </FilterGroup>
+            {periodSel.key === "custom" && (
+              <FilterGroup label="Pick the first and last day">
+                <DateRange from={periodSel.from} to={periodSel.to} onChange={(a, b) => pickPeriod({ from: a, to: b })} />
+              </FilterGroup>
+            )}
+            <p className="pm-period-note">Showing <b>{period.dates}</b>{period.days > 1 ? ` (${num(period.days)} days)` : ""}.</p>
           </Drawer>
         )}
         {profileOpen && (

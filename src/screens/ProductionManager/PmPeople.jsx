@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fmtDate as formatDate } from "./pmModel";
-import { Columns, Drawer, Empty, Icon, Insight, PageHead, Pager, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
+import { Chips, Columns, Drawer, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, Pager, RankBars, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
 import { ScanReport } from "./PmApprovals";
-import { CsvButton, defineKit } from "../CeoDashboard/dashKit";
+import { CsvButton, FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { csvFromObjects } from "./PmCommon";
-import { DAY, dayKey, pct, plural, todayStart } from "./pmModel";
+import { DAY, pct, plural, todayStart } from "./pmModel";
+import { coverKey, periodSteps, stepOf } from "./pmPeriod";
 
 // ============================================================
 // People: who scanned what, where and when, how much of it was on time, the
@@ -24,7 +25,7 @@ const { Tile, Card, Table } = defineKit({
     "Scans by Person": "Scans each person recorded in the period, with the stations they used and their on-time share. Click a person to see the pieces they scanned.",
     "Scans by Station": "Scans recorded at each station in the period. Click a station to see the pieces scanned there.",
     "Busiest Hours": "Scans by hour of the day across the period, so you can see when the floor is busiest.",
-    "Scans per Day": "Scans each day, split by the warehouse the scan was made in. The number on top is the day's total.",
+    "Scans Over Time": "Scans each day, week or month (depending on the date range), split by the warehouse the scan was made in. The number on top is the total.",
     "QC Inspectors": "QC checks each inspector recorded in the period and the share that failed. Final QC overrides are left out because nobody inspected the garment.",
     "Manual Moves": "Who moved pieces by manual override in the period, and how many.",
     "Everyone": "One row per person for the period. Export downloads the full list.",
@@ -34,7 +35,19 @@ const { Tile, Card, Table } = defineKit({
   },
 });
 
-const PERIODS = [{ value: "1", label: "Today" }, { value: "7", label: "Last 7 Days" }, { value: "30", label: "Last 30 Days" }];
+const SORTS = [
+  { value: "scans", label: "Most scans" }, { value: "pieces", label: "Most pieces" }, { value: "ontime", label: "Lowest on time" },
+  { value: "manual", label: "Most manual moves" }, { value: "last", label: "Scanned most recently" }, { value: "name", label: "Name, A to Z" },
+];
+const SORT_FN = {
+  scans: (a, b) => b.value - a.value,
+  pieces: (a, b) => b.pieces.size - a.pieces.size || b.value - a.value,
+  ontime: (a, b) => (a.timed ? a.onTime / a.timed : 2) - (b.timed ? b.onTime / b.timed : 2) || b.value - a.value,
+  manual: (a, b) => b.manual - a.manual || b.value - a.value,
+  last: (a, b) => b.last - a.last,
+  name: (a, b) => a.name.localeCompare(b.name),
+};
+const factoryOf = (t) => (t.factory === "SB WH Delhi (1)" || t.factory === "SB WH Delhi (2)" ? t.factory : "other");
 const FACTORIES = [
   { key: "SB WH Delhi (1)", name: "SB WH Delhi (1)", color: "#a9821f" },
   { key: "SB WH Delhi (2)", name: "SB WH Delhi (2)", color: "#e6d18f" },
@@ -44,30 +57,43 @@ const time = (ms) => new Date(ms).toLocaleString("en-GB", { day: "numeric", mont
 const nameOf = (v) => String(v || "").trim() || "Not recorded";
 
 export default function PeoplePage({ ctx }) {
-  const { need, lazy, openPieces, piecesById } = ctx;
-  useEffect(() => { need("scans30"); need("qc90"); }, [need]);
-  const [period, setPeriod] = useState("7");
+  const { need, lazy, openPieces, piecesById, period } = ctx;
+  // Short ranges also load the same number of days before, to see who stopped scanning.
+  const scanKey = coverKey("scans", period.days < 30 ? period.reach : period.back);
+  const qcKey = coverKey("qc", period.back);
+  useEffect(() => { need(scanKey); need(qcKey); }, [need, scanKey, qcKey]);
   const [page, setPage] = useState(1);
   const [reportOpen, setReportOpen] = useState(false);
-  const scans = lazy.scans30?.rows;
-  const qc = lazy.qc90?.rows;
-  const days = Number(period);
-  const start = useMemo(() => { const d = todayStart(); d.setDate(d.getDate() - (days - 1)); return d.getTime(); }, [days]);
-  const periodName = PERIODS.find((p) => p.value === period)?.label;
-  useEffect(() => { setPage(1); }, [period]);
+  const [drawer, setDrawer] = useState(false);
+  const [sort, setSort] = useState("scans");
+  const [houses, setHouses] = useState([]);
+  const [stationF, setStationF] = useState([]);
+  const [kind, setKind] = useState("");
+  const loadedScans = lazy[scanKey]?.rows;
+  const qc = lazy[qcKey]?.rows;
+  const days = period.days;
+  const start = period.start.getTime();
+  const end = period.end.getTime();
+  const periodName = period.label;
+  const filterCount = (houses.length ? 1 : 0) + (stationF.length ? 1 : 0) + (kind ? 1 : 0) + (sort !== "scans" ? 1 : 0);
+  useEffect(() => { setPage(1); }, [period, sort, houses, stationF, kind]);
+  const stations = useMemo(() => {
+    const m = {};
+    (loadedScans || []).forEach((t) => { if (period.inP(t.scanned_at)) { const k = nameOf(t.station_name); m[k] = (m[k] || 0) + 1; } });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k]) => ({ value: k, label: k }));
+  }, [loadedScans, period]);
+  const scans = useMemo(() => loadedScans && loadedScans.filter((t) => (!houses.length || houses.includes(factoryOf(t)))
+    && (!stationF.length || stationF.includes(nameOf(t.station_name)))
+    && (!kind || (kind === "manual") === (t.transition_type === "manual_override"))), [loadedScans, houses, stationF, kind]);
 
   const data = useMemo(() => {
     if (!scans) return null;
-    const list = scans.filter((t) => new Date(t.scanned_at).getTime() >= start);
+    const list = scans.filter((t) => period.inP(t.scanned_at));
     const people = {};
     const stations = {};
     const hours = Array.from({ length: 24 }, (_, h) => ({ name: `${String(h).padStart(2, "0")}:00`, value: 0, ids: new Set() }));
-    const dayRows = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const d = todayStart(); d.setDate(d.getDate() - i);
-      dayRows.push({ key: dayKey(d), name: days === 1 ? "Today" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }), total: 0, ...Object.fromEntries(FACTORIES.map((f) => [f.key, 0])) });
-    }
-    const dayBy = Object.fromEntries(dayRows.map((d) => [d.key, d]));
+    const { step, steps } = periodSteps(period);
+    const dayRows = steps.map((s) => ({ name: days === 1 ? s.full : s.name, total: 0, ...Object.fromEntries(FACTORIES.map((f) => [f.key, 0])) }));
     let timed = 0; let onTime = 0; let manual = 0;
     const allPieces = new Set();
     const latePieces = new Set();
@@ -89,30 +115,28 @@ export default function PeoplePage({ ctx }) {
       s.value += 1; s.people.add(who); if (t.component_id) s.pieces.add(t.component_id);
       hours[at.getHours()].value += 1;
       if (t.component_id) hours[at.getHours()].ids.add(t.component_id);
-      const d = dayBy[dayKey(at)];
-      if (d) {
-        const f = t.factory === "SB WH Delhi (1)" || t.factory === "SB WH Delhi (2)" ? t.factory : "other";
-        d[f] += 1; d.total += 1;
-      }
+      const d = dayRows[stepOf(steps, at)];
+      if (d) { d[factoryOf(t)] += 1; d.total += 1; }
     });
-    const peopleList = Object.values(people).sort((a, b) => b.value - a.value);
-    const prevStart = start - days * DAY;
-    const before = new Set(scans.filter((t) => { const ms = new Date(t.scanned_at).getTime(); return ms >= prevStart && ms < start; }).map((t) => nameOf(t.scanned_by)));
+    const peopleList = Object.values(people).sort(SORT_FN.scans);
+    const before = new Set(scans.filter((t) => period.prev.inP(t.scanned_at)).map((t) => nameOf(t.scanned_by)));
     const missing = days < 30 ? [...before].filter((n) => !people[n] && n !== "Not recorded") : [];
     return {
-      list, timed, onTime, manual, hours, dayRows, allPieces, latePieces, missing,
+      list, timed, onTime, manual, hours, dayRows, step, allPieces, latePieces, missing,
       people: peopleList,
+      everyone: [...peopleList].sort(SORT_FN[sort] || SORT_FN.scans),
       stations: Object.values(stations).sort((a, b) => b.value - a.value),
       manualPeople: peopleList.filter((p) => p.manual > 0).sort((a, b) => b.manual - a.manual),
       factoriesUsed: FACTORIES.filter((f) => dayRows.some((d) => d[f.key] > 0)),
     };
-  }, [scans, start, days]);
+  }, [scans, period, days, sort]);
 
   const inspectors = useMemo(() => {
     if (!qc) return null;
     const m = {};
     qc.forEach((r) => {
-      if (new Date(r.created_at).getTime() < start || r.is_override) return;
+      const ms = new Date(r.created_at).getTime();
+      if (ms < start || ms >= end || r.is_override) return;
       const who = nameOf(r.inspected_by);
       const g = m[who] || (m[who] = { name: who, value: 0, fails: 0, pieces: new Set(), failPieces: new Set() });
       g.value += 1;
@@ -120,7 +144,7 @@ export default function PeoplePage({ ctx }) {
       if (r.result === "fail") { g.fails += 1; if (r.component_id) g.failPieces.add(r.component_id); }
     });
     return Object.values(m).sort((a, b) => b.value - a.value);
-  }, [qc, start]);
+  }, [qc, start, end]);
 
   const piecesOf = (ids) => [...ids].map((id) => piecesById[id]).filter(Boolean);
   const peopleRows = (list) => list.map((p) => ({
@@ -133,9 +157,16 @@ export default function PeoplePage({ ctx }) {
   return (
     <div className="ceo-page">
       <PageHead title="People" desc="Who scanned what, where and when. Click a person, a station or a bar to see the pieces behind it.">
-        <Seg label="Period" value={period} onChange={setPeriod} options={PERIODS} />
+        <FilterButton count={filterCount} onClick={() => setDrawer(true)} />
         <button type="button" className="ceo-btn" onClick={() => setReportOpen(true)}><Icon name="download" />Scan Report</button>
       </PageHead>
+      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} count={data ? data.list.length : 0} noun="scans" sub="Narrow every figure on this page"
+        onClear={() => { setSort("scans"); setHouses([]); setStationF([]); setKind(""); }}>
+        <FilterGroup label="Sort the Everyone List By"><Chips options={SORTS} value={sort} onChange={(v) => setSort(v || "scans")} /></FilterGroup>
+        <FilterGroup label="Warehouse"><Chips options={FACTORIES.map((f) => ({ value: f.key, label: f.name }))} value={houses} onChange={setHouses} /></FilterGroup>
+        <FilterGroup label="Scan Type"><Chips options={[{ value: "station", label: "Station scans" }, { value: "manual", label: "Manual moves" }]} value={kind} onChange={setKind} /></FilterGroup>
+        <FilterGroup label="Station"><Chips options={stations} value={stationF} onChange={setStationF} /></FilterGroup>
+      </FilterDrawer>
       {reportOpen && (
         <Drawer title="Scan Report" sub="Download every scan in the dates you choose" onClose={() => setReportOpen(false)}>
           <ScanReport ctx={ctx} />
@@ -173,7 +204,7 @@ export default function PeoplePage({ ctx }) {
                     <Insight>The floor scanned between <b>{String(firstHour).padStart(2, "0")}:00</b> and <b>{String(lastHour + 1).padStart(2, "0")}:00</b>; the busiest hour was <b>{busiest.name}</b> with {plural(busiest.value, "scan")}.</Insight>
                     {data.timed > 0 && <Insight tone={pct(data.onTime, data.timed) < 80 ? "warn" : "gold"}><b>{pct(data.onTime, data.timed)}%</b> of timed scans moved pieces on within the stage limit.{lowest && pct(lowest.onTime, lowest.timed) < pct(data.onTime, data.timed) ? <> The lowest share is <b>{lowest.name}</b> at {pct(lowest.onTime, lowest.timed)}%.</> : null}</Insight>}
                     {data.manual > 0 && <Insight tone={pct(data.manual, data.list.length) > 10 ? "warn" : "gold"}><b>{num(data.manual)}</b> moves ({pct(data.manual, data.list.length)}%) were made by manual override instead of a station scan{topManual ? <>, most by <b>{topManual.name}</b> ({num(topManual.manual)})</> : null}.</Insight>}
-                    {data.missing.length > 0 && <Insight tone="warn">Scanned in the {days === 1 ? "day" : `${days} days`} before but not {periodName.toLowerCase()}: <b>{data.missing.slice(0, 6).join(", ")}</b>{data.missing.length > 6 ? ` and ${num(data.missing.length - 6)} more` : ""}.</Insight>}
+                    {data.missing.length > 0 && <Insight tone="warn">Scanned in the {days === 1 ? "day" : `${days} days`} before but not in this range ({periodName.toLowerCase()}): <b>{data.missing.slice(0, 6).join(", ")}</b>{data.missing.length > 6 ? ` and ${num(data.missing.length - 6)} more` : ""}.</Insight>}
                   </>
                 );
               })()}
@@ -194,7 +225,7 @@ export default function PeoplePage({ ctx }) {
               highlight={(d) => d.value === Math.max(...data.hours.map((h) => h.value))}
               onPick={(d) => d.value && openPieces({ title: `Scanned ${d.name}–${String(Number(d.name.slice(0, 2)) + 1).padStart(2, "0")}:00`, sub: periodName, pieces: piecesOf(d.ids) })} />
           </Card>
-          <Card span={6} md={12} title="Scans per Day" sub="Split by the warehouse the scan was made in">
+          <Card span={6} md={12} title="Scans Over Time" sub={`Per ${data.step}, split by the warehouse the scan was made in`}>
             <DayStack rows={data.dayRows} factories={data.factoriesUsed} />
           </Card>
 
@@ -215,9 +246,9 @@ export default function PeoplePage({ ctx }) {
               ]} />
           </Card>
 
-          <Card span={12} title="Everyone" sub={`${plural(data.people.length, "person", "people")}, ${periodName.toLowerCase()}`}>
-            <div className="gm-actions"><CsvButton disabled={!data.people.length} onClick={() => csvFromObjects(`people ${periodName}`, peopleRows(data.people))} /></div>
-            <Table rowKey={(r) => r.name} rows={data.people.slice((page - 1) * 15, page * 15)} empty="No scans in this period."
+          <Card span={12} title="Everyone" sub={`${plural(data.people.length, "person", "people")}, ${periodName.toLowerCase()}. Sorted by ${SORTS.find((s) => s.value === sort).label.toLowerCase()}.`}>
+            <div className="gm-actions"><CsvButton disabled={!data.people.length} onClick={() => csvFromObjects(`people ${periodName}`, peopleRows(data.everyone))} /></div>
+            <Table rowKey={(r) => r.name} rows={data.everyone.slice((page - 1) * 15, page * 15)} empty="No scans in this period."
               onRow={(r) => openPieces({ title: `Scanned by ${r.name}`, sub: periodName, pieces: piecesOf(r.pieces) })}
               columns={[
                 { key: "name", label: "Person", render: (r) => <span className="pm-cell"><b>{r.name}</b><small>{[...r.stations].join(", ") || "No station"}</small></span> },

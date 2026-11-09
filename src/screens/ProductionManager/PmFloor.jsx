@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { STAGE_GROUPS, getStageGroupKey } from "../../utils/barcodeService";
-import { Columns, Empty, Insight, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
-import { defineKit } from "../CeoDashboard/dashKit";
+import { Chips, Columns, Empty, FilterButton, FilterGroup, Insight, PageHead, RankBars, num } from "../CeoDashboard/CeoUi";
+import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { FloorBars, useFloor } from "./PmToday";
 import {
-  DAY, FLOOR_STEPS, dayKey, floorKey, idleDays, median, pct, pieceState, plural, todayStart,
+  DAY, FLOOR_STEPS, channelOf, dayKey, floorKey, idleDays, isRunning, isUrgent, median, pct, pieceState, plural, todayStart,
 } from "./pmModel";
 
 // ============================================================
@@ -77,10 +77,23 @@ function StuckBars({ ctx, stuck }) {
 }
 
 export default function FloorPage({ ctx }) {
-  const { need, lazy, openOrders, openPieces, piecesById, componentsByOrder, orders } = ctx;
+  const { need, lazy, openOrders, openPieces, piecesById, componentsByOrder, orders: allOrders } = ctx;
   useEffect(() => { need("scans30"); }, [need]);
-  const floor = useFloor(ctx);
-  const scans = lazy.scans30?.rows;
+  const [drawer, setDrawer] = useState(false);
+  const [channels, setChannels] = useState([]);
+  const [urgentOnly, setUrgentOnly] = useState(false);
+  const channelList = useMemo(() => {
+    const m = {};
+    allOrders.filter(isRunning).forEach((o) => { const k = channelOf(o); m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k]) => ({ value: k, label: k }));
+  }, [allOrders]);
+  const filtered = channels.length > 0 || urgentOnly;
+  // Every figure on the page follows the filters: the orders, their pieces and their scans.
+  const orders = useMemo(() => (filtered ? allOrders.filter((o) => (!channels.length || channels.includes(channelOf(o))) && (!urgentOnly || isUrgent(o))) : allOrders), [allOrders, channels, urgentOnly, filtered]);
+  const floor = useFloor({ orders, componentsByOrder });
+  const keep = useMemo(() => new Set(orders.map((o) => o.id)), [orders]);
+  const allScans = lazy.scans30?.rows;
+  const scans = useMemo(() => (allScans && filtered ? allScans.filter((t) => keep.has(t.order_id)) : allScans), [allScans, filtered, keep]);
 
   // Everything that needs the 30 days of scans, in one pass.
   const flow = useMemo(() => {
@@ -209,7 +222,14 @@ export default function FloorPage({ ctx }) {
 
   return (
     <div className="ceo-page">
-      <PageHead title="Floor & Flow" desc="Where the pieces are, where they are held up and how fast they move. Based on the live floor and the last 30 days of scans." />
+      <PageHead title="Floor & Flow" desc="Where the pieces are, where they are held up and how fast they move. Based on the live floor and the last 30 days of scans.">
+        <FilterButton count={(channels.length ? 1 : 0) + (urgentOnly ? 1 : 0)} onClick={() => setDrawer(true)} />
+      </PageHead>
+      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setChannels([]); setUrgentOnly(false); }}
+        count={floor.running.length} noun="running orders" sub="Show the floor for some orders only">
+        <FilterGroup label="Priority"><Chips options={[{ value: "urgent", label: "Urgent only" }]} value={urgentOnly ? "urgent" : ""} onChange={(v) => setUrgentOnly(v === "urgent")} /></FilterGroup>
+        <FilterGroup label="Channel"><Chips options={channelList} value={channels} onChange={setChannels} /></FilterGroup>
+      </FilterDrawer>
       <div className="ceo-tiles">
         <Tile icon="movements" label="Pieces on the Floor" value={num(floor.inHouse.length)} note={`${num(movedWeek)} moved in the last 7 days`} onClick={() => openPieces({ title: "Pieces on the Floor", sub: "Being worked on in the warehouse", pieces: floor.inHouse })} />
         <Tile icon="warehouse" label="At Vendors" value={num(floor.atVendor.length)} note={`${num(floor.wh2.length)} more at our Delhi (2)`} onClick={() => openPieces({ title: "At Outside Vendors", sub: "Out with an outside vendor right now", pieces: floor.atVendor })} />

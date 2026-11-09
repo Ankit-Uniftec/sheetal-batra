@@ -3,12 +3,12 @@ import ExternalVendorsPanel from "../../components/ExternalVendorsPanel";
 import VendorDelaysTab from "../../components/VendorDelays/VendorDelaysTab";
 import VendorRequest from "../../components/VendorRequest";
 import { fmtDate as formatDate } from "./pmModel";
-import { Empty, Insight, PageHead, Seg, num } from "../CeoDashboard/CeoUi";
-import { defineKit } from "../CeoDashboard/dashKit";
+import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, Seg, num } from "../CeoDashboard/CeoUi";
+import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
 import { csvFromObjects } from "./PmCommon";
 import { DAY, isOwnTrip, localDay, pct, plural } from "./pmModel";
-import { GOLD, StackBars, windowStart } from "./PmQuality";
+import { GOLD, StackBars } from "./PmQuality";
 
 // ============================================================
 // Vendors: who has our pieces, who brings them back on time, and the three
@@ -38,7 +38,11 @@ const LOCAL_CARDS = {
 };
 const { Tile, Card, Table } = defineKit({ tiles: { ...TILE_INFO, ...LOCAL_TILES }, cards: { ...CARD_INFO, ...LOCAL_CARDS }, columns: COLUMN_INFO });
 
-const PERIODS = [{ value: "30", label: "Last 30 Days" }, { value: "90", label: "Last 90 Days" }, { value: "all", label: "All Time" }];
+const SORTS = [
+  { value: "out", label: "Most pieces out now" }, { value: "overdue", label: "Most overdue" }, { value: "sent", label: "Most trips sent" },
+  { value: "ontime", label: "Lowest on time" }, { value: "away", label: "Longest away" }, { value: "name", label: "Name, A to Z" },
+];
+const stageOfTrip = (m) => (m.stageLabel && m.stageLabel !== "—" ? m.stageLabel : "Not recorded");
 const vendorOf = (m) => (m.vendor_name || "Unknown vendor").trim();
 const sentAt = (m) => m.exit_scan_at || null;
 const daysAway = (m) => (m.exit_scan_at && m.entry_scan_at ? Math.max(0, Math.round((localDay(m.entry_scan_at) - localDay(m.exit_scan_at)) / DAY)) : null);
@@ -46,9 +50,14 @@ const backOnTime = (m) => (m.return_date && m.entry_scan_at ? localDay(m.entry_s
 const one = (v) => (Math.round(v * 10) / 10).toLocaleString("en-IN");
 
 export default function VendorsPage({ ctx }) {
-  const { lazy, need, piecesById, ordersById, openPieces, openOrder } = ctx;
-  const [period, setPeriod] = useState("30");
+  const { lazy, need, piecesById, ordersById, openPieces, openOrder, period } = ctx;
   const [view, setView] = useState("out");
+  const [drawer, setDrawer] = useState(false);
+  const [vendorF, setVendorF] = useState([]);
+  const [stageF, setStageF] = useState([]);
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [sort, setSort] = useState("out");
+  const filterCount = (vendorF.length ? 1 : 0) + (stageF.length ? 1 : 0) + (overdueOnly ? 1 : 0) + (sort !== "out" ? 1 : 0);
   useEffect(() => { need("movements"); }, [need]);
   const moves = lazy.movements?.rows;
   const onOrderClick = (id) => ordersById[id] && openOrder(ordersById[id]);
@@ -61,9 +70,8 @@ export default function VendorsPage({ ctx }) {
     // Outside vendors only: trips to our own SB WH Delhi (2) are not vendor work.
     const ownTrips = moves.filter(isOwnTrip);
     const ownOut = new Set(ownTrips.filter((m) => m.isOut).map((m) => m.component_id)).size;
-    const start = period === "all" ? null : windowStart(period);
-    const inP = (ts) => !!ts && (!start || new Date(ts) >= start);
-    const outside = moves.filter((m) => !isOwnTrip(m));
+    const inP = period.inP;
+    const outside = moves.filter((m) => !isOwnTrip(m) && (!vendorF.length || vendorF.includes(vendorOf(m))) && (!stageF.length || stageF.includes(stageOfTrip(m))));
     const outNow = outside.filter((m) => m.isOut);
     const overdue = outNow.filter((m) => m.overdue).sort((a, b) => b.daysOverdue - a.daysOverdue);
     const sent = outside.filter((m) => inP(sentAt(m)));
@@ -88,16 +96,27 @@ export default function VendorsPage({ ctx }) {
       ...r,
       onTimePct: r.timed ? pct(r.onTime, r.timed) : null,
       avgAway: r.away.length ? r.away.reduce((s, v) => s + v, 0) / r.away.length : null,
-    })).sort((a, b) => b.out.length - a.out.length || b.sent.length - a.sent.length);
+    }));
+    const byOut = (a, b) => b.out.length - a.out.length || b.sent.length - a.sent.length;
+    const SORT_FN = {
+      out: byOut,
+      overdue: (a, b) => b.overdue.length - a.overdue.length || byOut(a, b),
+      sent: (a, b) => b.sent.length - a.sent.length || byOut(a, b),
+      ontime: (a, b) => (a.onTimePct ?? 101) - (b.onTimePct ?? 101) || byOut(a, b),
+      away: (a, b) => (b.avgAway ?? -1) - (a.avgAway ?? -1) || byOut(a, b),
+      name: (a, b) => a.name.localeCompare(b.name),
+    };
+    vendors.sort(SORT_FN[sort] || byOut);
+    const shown = overdueOnly ? vendors.filter((v) => v.overdue.length) : vendors;
 
-    const outBars = vendors.filter((v) => v.out.length).slice(0, 10)
+    const outBars = [...vendors].sort(byOut).filter((v) => v.out.length).slice(0, 10)
       .map((v) => ({ name: v.name, within: v.out.length - v.overdue.length, overdue: v.overdue.length, v }));
 
     const stage = {};
     back.forEach((m) => {
       const d = daysAway(m);
       if (d == null) return;
-      const k = m.stageLabel && m.stageLabel !== "—" ? m.stageLabel : "Not recorded";
+      const k = stageOfTrip(m);
       (stage[k] || (stage[k] = { name: k, list: [], days: [] })).list.push(m);
       stage[k].days.push(d);
     });
@@ -106,11 +125,17 @@ export default function VendorsPage({ ctx }) {
 
     // Pieces, not trips: a piece can have more than one open trip on record.
     const distinct = (list) => new Set(list.map((m) => m.component_id || `m${m.id}`)).size;
-    return { ownOut, outNow, overdue, outPieces: distinct(outNow), overduePieces: distinct(overdue), sent, back, timed, onTime, repeats, vendors, outBars, byStage, used: vendors.filter((v) => v.sent.length).length };
-  }, [moves, period]);
+    return { ownOut, outNow, overdue, outPieces: distinct(outNow), overduePieces: distinct(overdue), sent, back, timed, onTime, repeats, vendors, shown, outBars, byStage, used: vendors.filter((v) => v.sent.length).length };
+  }, [moves, period, vendorF, stageF, sort, overdueOnly]);
 
-  const label = PERIODS.find((p) => p.value === period)?.label;
-  const exportScorecard = () => csvFromObjects(`vendor scorecard ${label}`, data.vendors.map((v) => ({
+  // Filter choices from the trips on record: vendors with the most trips first.
+  const choices = useMemo(() => {
+    const count = (keyOf) => { const m = {}; (moves || []).filter((x) => !isOwnTrip(x)).forEach((x) => { const k = keyOf(x); m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k]) => ({ value: k, label: k })); };
+    return { vendors: count(vendorOf).slice(0, 30), stages: count(stageOfTrip) };
+  }, [moves]);
+
+  const label = period.label;
+  const exportScorecard = () => csvFromObjects(`vendor scorecard ${label}`, data.shown.map((v) => ({
     Vendor: v.name, "Trips Sent": v.sent.length, "Out Now": v.out.length, "Overdue Now": v.overdue.length, Returned: v.back.length,
     "Returned On Time %": v.onTimePct ?? "", "Average Days Away": v.avgAway == null ? "" : one(v.avgAway), "Repeat Sends": v.repeats.length,
   })));
@@ -123,8 +148,15 @@ export default function VendorsPage({ ctx }) {
   return (
     <div className="ceo-page">
       <PageHead title="Vendors" desc="Which vendors have our pieces, who brings them back on time, and every trip, delay and penalty.">
-        <Seg label="Period" value={period} onChange={setPeriod} options={PERIODS} />
+        <FilterButton count={filterCount} onClick={() => setDrawer(true)} />
       </PageHead>
+      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} count={data ? data.shown.length : 0} noun="vendors" sub="Narrow every figure on this page"
+        onClear={() => { setVendorF([]); setStageF([]); setOverdueOnly(false); setSort("out"); }}>
+        <FilterGroup label="Sort the Scorecard By"><Chips options={SORTS} value={sort} onChange={(v) => setSort(v || "out")} /></FilterGroup>
+        <FilterGroup label="Show"><Chips options={[{ value: "overdue", label: "Vendors with overdue pieces" }]} value={overdueOnly ? "overdue" : ""} onChange={(v) => setOverdueOnly(v === "overdue")} /></FilterGroup>
+        <FilterGroup label="Sent For"><Chips options={choices.stages} value={stageF} onChange={setStageF} /></FilterGroup>
+        <FilterGroup label="Vendor"><Chips options={choices.vendors} value={vendorF} onChange={setVendorF} /></FilterGroup>
+      </FilterDrawer>
       {!data ? <section className="ceo-card"><Empty text={lazy.movements?.error ? `Vendor trips could not be loaded: ${lazy.movements.error}` : "Loading vendor trips…"} /></section> : (
         <>
           <div className="ceo-tiles">
@@ -150,8 +182,8 @@ export default function VendorsPage({ ctx }) {
               </Card>
             )}
 
-            <Card span={12} title="Vendor Scorecard" sub={`${label}; out now and overdue are live. Click a vendor to see its pieces.`}>
-              <Table rowKey={(r) => r.name} rows={data.vendors} empty="No vendor trips in this period."
+            <Card span={12} title="Vendor Scorecard" sub={`${label}; out now and overdue are live. Sorted by ${SORTS.find((s) => s.value === sort).label.toLowerCase()}. Click a vendor to see its pieces.`}>
+              <Table rowKey={(r) => r.name} rows={data.shown} empty="No vendor trips in this period."
                 onRow={(v) => (v.out.length ? openTrips(`At ${v.name} Now`, "Out with this vendor", v.out) : openTrips(`Sent to ${v.name}`, label, v.sent.length ? v.sent : v.back))}
                 columns={[
                   { key: "name", label: "Vendor", render: (v) => <span className="pm-cell"><b>{v.name}</b>{v.overdue.length > 0 && <small className="pm-late">{plural(v.overdue.length, "piece")} overdue</small>}</span> },
@@ -171,7 +203,7 @@ export default function VendorsPage({ ctx }) {
               <div className="pmq-legend">{OUT_SERIES.map((s) => <span key={s.key}><i style={{ background: s.color }} />{s.name}</span>)}</div>
             </Card>
 
-            <Card span={5} md={12} title="Days Away by Stage" sub={`Average days at the vendor, trips back in the ${label.toLowerCase()}`}>
+            <Card span={5} md={12} title="Days Away by Stage" sub={`Average days at the vendor, trips back (${label.toLowerCase()})`}>
               <StackBars data={data.byStage.slice(0, 8).map((s) => ({ name: s.name, avg: s.avg, s }))} series={[{ key: "avg", name: "Average days away", color: GOLD[1] }]} height={270} format={one}
                 onPick={(b) => { const s = data.byStage.find((x) => x.name === b.name); if (s) openTrips(`Back from ${s.name}`, `${plural(s.n, "trip")}, ${one(s.avg)} days on average`, s.list); }} />
             </Card>

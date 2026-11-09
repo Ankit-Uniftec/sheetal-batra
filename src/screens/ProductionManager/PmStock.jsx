@@ -42,6 +42,10 @@ const { Tile, Card, Table } = defineKit({
 const STOCK_CHANNELS = ["retail_stock", "b2b_stock", "shopify_stock"];
 const LEVELS = [{ value: "ok", label: "In stock" }, { value: "low", label: "Low (1–4)" }, { value: "out", label: "Out of stock" }];
 const TYPES = [{ value: TYPE_LXRTS, label: "LXRTS" }, { value: TYPE_CUSTOM, label: "Custom piece" }];
+const STOCK_SORTS = [
+  { value: "most", label: "Most pieces" }, { value: "least", label: "Fewest pieces" },
+  { value: "making", label: "Most being made" }, { value: "name", label: "Name, A to Z" },
+];
 const LEVEL_WORD = { ok: "In stock", low: "Low", out: "Out of stock", unlimited: "Unlimited", untracked: "Made to order" };
 const PAGE = 15;
 const pcs = (r) => (r.stock.tracked && !r.stock.unlimited ? r.stock.total : 0);
@@ -59,10 +63,12 @@ export default function StockPage({ ctx }) {
   const [search, setSearch] = useState("");
   const [level, setLevel] = useState("");
   const [type, setType] = useState("");
+  const [sortBy, setSortBy] = useState("most");
+  const [makingF, setMakingF] = useState("");
   const [drawer, setDrawer] = useState(false);
   const [page, setPage] = useState(1);
   const [design, setDesign] = useState(null);
-  useEffect(() => { setPage(1); }, [search, level, type]);
+  useEffect(() => { setPage(1); }, [search, level, type, sortBy, makingF]);
   // Opened from the header search: show that design once Stock Room's data is in.
   useEffect(() => {
     if (!ctx.stockFocus || !view) return;
@@ -124,9 +130,16 @@ export default function StockPage({ ctx }) {
     if (!data) return [];
     const q = search.trim().toLowerCase();
     return data.stocked.filter((r) => (!q || [r.product.name, r.product.sku_id].some((v) => String(v || "").toLowerCase().includes(q)))
-      && (!level || r.status === level) && (!type || r.type === type))
-      .sort((a, b) => pcs(b) - pcs(a) || String(a.product.name).localeCompare(String(b.product.name)));
-  }, [data, search, level, type]);
+      && (!level || r.status === level) && (!type || r.type === type)
+      && (!makingF || (makingF === "yes") === ((making.byProduct[r.id]?.qty || 0) > 0)))
+      .sort((a, b) => {
+        const byName = String(a.product.name).localeCompare(String(b.product.name));
+        if (sortBy === "least") return pcs(a) - pcs(b) || byName;
+        if (sortBy === "making") return (making.byProduct[b.id]?.qty || 0) - (making.byProduct[a.id]?.qty || 0) || pcs(b) - pcs(a);
+        if (sortBy === "name") return byName;
+        return pcs(b) - pcs(a) || byName;
+      });
+  }, [data, search, level, type, sortBy, makingF, making]);
 
   const hmOpen = (halfMade || []).filter((h) => !["used", "written_off"].includes(String(h.status || "").toLowerCase()));
 
@@ -208,7 +221,7 @@ export default function StockPage({ ctx }) {
         </Card>
 
         <Card span={12} className="pms-list" title="Designs in Stock" sub={`${num(data.stocked.length)} stocked designs (LXRTS and custom pieces); ${num(t.mto)} made-to-order designs hold no stock and are not listed.`}>
-          <ListTools search={search} onSearch={setSearch} placeholder="Search design or SKU" filters={(level ? 1 : 0) + (type ? 1 : 0)} onFilters={() => setDrawer(true)} exportDisabled={!list.length} onExport={exportList} />
+          <ListTools search={search} onSearch={setSearch} placeholder="Search design or SKU" filters={(level ? 1 : 0) + (type ? 1 : 0) + (makingF ? 1 : 0) + (sortBy !== "most" ? 1 : 0)} onFilters={() => setDrawer(true)} exportDisabled={!list.length} onExport={exportList} />
           <Table rowKey={(r) => r.id} rows={list.slice((page - 1) * PAGE, page * PAGE)} onRow={setDesign} empty="No designs match." columns={[
             { key: "d", label: "Design", render: (r) => <span className="ceo-ocell"><Thumb src={r.product.image_url} alt="" /><span><b>{r.product.name}</b><small>{r.product.sku_id || "–"} · {TYPE_LABELS[r.type]}</small></span></span> },
             { key: "sizes", label: "Sizes", hide: true, lap: true, render: (r) => <small className="pm-muted">{sizeLine(r)}</small> },
@@ -230,7 +243,9 @@ export default function StockPage({ ctx }) {
         </Card>
       </div>
 
-      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setLevel(""); setType(""); }} count={list.length} noun="designs" sub="Narrow the designs in stock">
+      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setLevel(""); setType(""); setSortBy("most"); setMakingF(""); }} count={list.length} noun="designs" sub="Narrow the designs in stock">
+        <FilterGroup label="Sort By"><Chips options={STOCK_SORTS} value={sortBy} onChange={(v) => setSortBy(v || "most")} /></FilterGroup>
+        <FilterGroup label="Being Made"><Chips options={[{ value: "yes", label: "Being made now" }, { value: "no", label: "Not being made" }]} value={makingF} onChange={setMakingF} /></FilterGroup>
         <FilterGroup label="Stock Level"><Chips options={LEVELS} value={level} onChange={setLevel} /></FilterGroup>
         <FilterGroup label="Type"><Chips options={TYPES} value={type} onChange={setType} /></FilterGroup>
       </FilterDrawer>

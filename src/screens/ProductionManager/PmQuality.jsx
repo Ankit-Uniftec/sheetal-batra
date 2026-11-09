@@ -3,12 +3,12 @@ import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, 
 import QcHistoryPanel from "../../components/QcHistoryPanel";
 import ReJourneyPanel from "../../components/ReJourneyPanel";
 import { getStageLabel } from "../../utils/barcodeService";
-import { fmtDate as formatDate } from "./pmModel";
-import { Empty, Insight, PageHead, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
-import { defineKit } from "../CeoDashboard/dashKit";
+import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
+import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
 import { csvFromObjects } from "./PmCommon";
-import { pct, plural, todayStart } from "./pmModel";
+import { channelOf, pct, plural, todayStart } from "./pmModel";
+import { coverKey, periodSteps } from "./pmPeriod";
 
 // ============================================================
 // Quality: QC checks, failures, re-work and overrides, worked out from
@@ -123,23 +123,40 @@ const inspected = (r) => r.is_override !== true;
 const failed = (r) => inspected(r) && r.result === "fail";
 
 export default function QualityPage({ ctx }) {
-  const { lazy, need, piecesById, ordersById, openPieces, openOrder } = ctx;
-  const [period, setPeriod] = useState("30");
+  const { lazy, need, piecesById, ordersById, openPieces, openOrder, period } = ctx;
   const [view, setView] = useState("history");
-  useEffect(() => { need("qc90"); need("qcAll"); need("rejourneys"); }, [need]);
-  const all = lazy.qc90?.rows;
+  const [drawer, setDrawer] = useState(false);
+  const [points, setPoints] = useState([]);
+  const [channels, setChannels] = useState([]);
+  const [who, setWho] = useState([]);
+  const [pieceKinds, setPieceKinds] = useState([]);
+  // The checks for the chosen range and the same number of days before it.
+  const qcKey = coverKey("qc", period.reach);
+  useEffect(() => { need(qcKey); need("qcAll"); need("rejourneys"); }, [need, qcKey]);
+  const loaded = lazy[qcKey]?.rows;
+  const chanOf = (r) => (ordersById[r.order_id] ? channelOf(ordersById[r.order_id]) : "Not known");
+  const kindOf = (r) => { const c = piecesById[r.component_id]; return c ? (c.component_type || "Piece").replace(/^\w/, (x) => x.toUpperCase()) : "Not known"; };
+  const pointOf = (r) => (r.which_qc === "final" ? "final" : "qc1");
+  // Filter choices come from the checks themselves.
+  const choices = useMemo(() => {
+    const list = (loaded || []).filter((r) => period.inP(r.created_at));
+    const count = (keyOf) => { const m = {}; list.forEach((r) => { const k = keyOf(r); m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k]) => ({ value: k, label: k })); };
+    return { channels: count(chanOf), inspectors: count((r) => r.inspected_by || "Not recorded").slice(0, 20), kinds: count(kindOf) };
+  }, [loaded, period, ordersById, piecesById]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filterCount = (points.length ? 1 : 0) + (channels.length ? 1 : 0) + (who.length ? 1 : 0) + (pieceKinds.length ? 1 : 0);
+  const all = useMemo(() => loaded && loaded.filter((r) => (!points.length || points.includes(pointOf(r)))
+    && (!channels.length || channels.includes(chanOf(r)))
+    && (!who.length || who.includes(r.inspected_by || "Not recorded"))
+    && (!pieceKinds.length || pieceKinds.includes(kindOf(r)))), [loaded, points, channels, who, pieceKinds, ordersById, piecesById]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const piecesOf = (rows) => [...new Set(rows.map((r) => r.component_id).filter(Boolean))].map((id) => piecesById[id]).filter(Boolean);
   const openRows = (title, sub, rows) => openPieces({ title, sub, pieces: piecesOf(rows) });
 
   const data = useMemo(() => {
     if (!all) return null;
-    const days = Number(period);
-    const start = windowStart(days);
-    const rows = all.filter((r) => new Date(r.created_at) >= start);
-    // The same length of time just before, for comparison (inside the 90 days loaded).
-    const prevStart = new Date(start); prevStart.setDate(prevStart.getDate() - days);
-    const prev = days < 90 ? all.filter((r) => { const t = new Date(r.created_at); return t >= prevStart && t < start; }) : null;
+    const rows = all.filter((r) => period.inP(r.created_at));
+    // The same number of days just before, for comparison.
+    const prev = all.filter((r) => period.prev.inP(r.created_at));
     const checks = rows.filter(inspected);
     const fails = rows.filter(failed);
     const rework = fails.filter((r) => r.outcome === "rework");
@@ -149,21 +166,13 @@ export default function QualityPage({ ctx }) {
     const prevChecks = prev ? prev.filter(inspected) : [];
     const prevRate = prevChecks.length ? ((prevChecks.length - prevChecks.filter(failed).length) / prevChecks.length) * 100 : null;
 
-    // Pass rate per day (7 days) or per week (30 / 90 days), oldest first.
-    const step = days === 7 ? 1 : 7;
-    const buckets = [];
-    for (let s = new Date(start); s <= todayStart(); s.setDate(s.getDate() + step)) {
-      const from = new Date(s);
-      const to = new Date(s); to.setDate(to.getDate() + step);
-      const inB = checks.filter((r) => { const t = new Date(r.created_at); return t >= from && t < to; });
+    // Pass rate per day, week or month across the range, oldest first.
+    const { step, steps } = periodSteps(period);
+    const buckets = steps.map((b) => {
+      const inB = checks.filter((r) => { const t = new Date(r.created_at); return t >= b.from && t < b.to; });
       const f = inB.filter(failed).length;
-      buckets.push({
-        name: step === 1 ? from.toLocaleDateString("en-GB", { weekday: "short" }) : from.toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-        full: step === 1 ? formatDate(from) : `Week from ${formatDate(from)}`,
-        passed: inB.length - f, failed: f, rate: inB.length ? Math.round(((inB.length - f) / inB.length) * 100) : 0,
-        rows: inB,
-      });
-    }
+      return { name: b.name, full: b.full, passed: inB.length - f, failed: f, rate: inB.length ? Math.round(((inB.length - f) / inB.length) * 100) : 0, rows: inB };
+    });
 
     const group = (list, keyOf) => {
       const m = {};
@@ -190,15 +199,22 @@ export default function QualityPage({ ctx }) {
     return { rows, checks, fails, rework, disposed, overrides, rate, prevRate, buckets, reasons, types, backTo, qcPoints, inspectors, repeat, step };
   }, [all, period, piecesById]);
 
-  const label = PERIODS.find((p) => p.value === period)?.label;
+  const label = period.label;
   const PASSFAIL = [{ key: "passed", name: "Passed", color: GOLD[1] }, { key: "failed", name: "Failed", color: GOLD[3] }];
 
   return (
     <div className="ceo-page">
       <PageHead title="Quality" desc="QC checks, why pieces fail, and where they go back to. Click any figure to see the pieces behind it.">
-        <Seg label="Period" value={period} onChange={setPeriod} options={PERIODS} />
+        <FilterButton count={filterCount} onClick={() => setDrawer(true)} />
       </PageHead>
-      {!data ? <section className="ceo-card"><Empty text={lazy.qc90?.error ? `QC records could not be loaded: ${lazy.qc90.error}` : "Loading QC records…"} /></section> : (
+      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setPoints([]); setChannels([]); setWho([]); setPieceKinds([]); }}
+        count={data ? data.checks.length : 0} noun="QC checks" sub={`Narrow the QC checks, ${label.toLowerCase()}`}>
+        <FilterGroup label="Check Point"><Chips options={[{ value: "qc1", label: "QC 1" }, { value: "final", label: "Final QC" }]} value={points} onChange={setPoints} /></FilterGroup>
+        <FilterGroup label="Piece"><Chips options={choices.kinds} value={pieceKinds} onChange={setPieceKinds} /></FilterGroup>
+        <FilterGroup label="Channel"><Chips options={choices.channels} value={channels} onChange={setChannels} /></FilterGroup>
+        <FilterGroup label="Checked By"><Chips options={choices.inspectors} value={who} onChange={setWho} /></FilterGroup>
+      </FilterDrawer>
+      {!data ? <section className="ceo-card"><Empty text={lazy[qcKey]?.error ? `QC records could not be loaded: ${lazy[qcKey].error}` : "Loading QC records…"} /></section> : (
         <>
           <div className="ceo-tiles">
             <Tile icon="integrity" label="QC Checks" value={num(data.checks.length)} note={label} onClick={() => openRows("QC Checks", label, data.checks)} />
@@ -214,7 +230,7 @@ export default function QualityPage({ ctx }) {
               <div className="pmq-insights">
                 {data.rate == null ? <Insight>No QC checks were recorded in this period.</Insight> : (
                   <Insight tone={data.prevRate != null && data.rate < data.prevRate - 1 ? "warn" : "gold"}>
-                    <b>{data.rate.toFixed(1)}%</b> of {plural(data.checks.length, "check")} passed{data.prevRate != null ? `, against ${data.prevRate.toFixed(1)}% in the ${period} days before` : ""}.
+                    <b>{data.rate.toFixed(1)}%</b> of {plural(data.checks.length, "check")} passed{data.prevRate != null ? `, against ${data.prevRate.toFixed(1)}% in the ${plural(period.days, "day")} before` : ""}.
                   </Insight>
                 )}
                 {data.types[0] && data.types[0].name !== "Other" && (
@@ -222,7 +238,7 @@ export default function QualityPage({ ctx }) {
                 )}
                 {(() => {
                   const list = data.inspectors.filter((r) => r.value >= 20).sort((a, b) => b.fails.length / b.value - a.fails.length / a.value);
-                  return list.length > 1 && list[0].fails.length > 0
+                  return list.length > 1 && list[0].fails.length > 0 && list[0].fails.length / list[0].value > (data.fails.length / data.checks.length) * 1.2
                     ? <Insight><b>{list[0].name}</b> fails the most pieces: {pct1(list[0].fails.length, list[0].value)}% of {num(list[0].value)} checks, against {pct1(data.fails.length, data.checks.length)}% overall.</Insight>
                     : null;
                 })()}
@@ -232,7 +248,7 @@ export default function QualityPage({ ctx }) {
               </div>
             </Card>
 
-            <Card span={7} md={12} title="Pass Rate Over Time" sub={`Passed and failed checks ${data.step === 1 ? "per day" : "per week"}; the total is above each bar. Click a bar for its pieces.`}>
+            <Card span={7} md={12} title="Pass Rate Over Time" sub={`Passed and failed checks per ${data.step}; the total is above each bar. Click a bar for its pieces.`}>
               <StackBars data={data.buckets} series={PASSFAIL} height={260}
                 onPick={(b, key) => { const row = data.buckets.find((x) => x.name === b.name); if (row) openRows(`${key === "failed" ? "Failed" : "Checked"}: ${row.full}`, `${row.rate}% passed`, key === "failed" ? row.rows.filter(failed) : row.rows); }} />
               <Legend series={PASSFAIL} />
@@ -295,7 +311,7 @@ export default function QualityPage({ ctx }) {
             onOrderClick={(id) => ordersById[id] && openOrder(ordersById[id])} />
         )}
       </section>
-      <p className="pm-foot-note">Final QC overrides are left out of the pass rate: nobody inspected those garments. The charts above cover up to the last 90 days; the QC History below holds every record.</p>
+      <p className="pm-foot-note">Final QC overrides are left out of the pass rate: nobody inspected those garments. The figures above follow the date range in the header; the QC History below holds every record.</p>
     </div>
   );
 }

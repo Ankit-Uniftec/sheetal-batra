@@ -5,7 +5,7 @@ import { Chips, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, RankB
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { OrdersTable } from "./PmCommon";
 import {
-  atVendor, atWh2, channelOf, dayKey, daysLeft, dueDay, floorKey, hasPromise, isLate, isRunning, pieceState, plural, todayStart,
+  atVendor, atWh2, channelOf, dayKey, daysLeft, dueDay, floorKey, hasPromise, isLate, isRunning, isUrgent, pieceState, plural, todayStart,
 } from "./pmModel";
 
 // ============================================================
@@ -45,11 +45,20 @@ export default function PlanningPage({ ctx }) {
   const today = todayStart();
   const [month, setMonth] = useState({ y: today.getFullYear(), m: today.getMonth() });
   const [channels, setChannels] = useState([]);
+  const [urgentOnly, setUrgentOnly] = useState(false);
+  const [progress, setProgress] = useState([]);
   const [drawer, setDrawer] = useState(false);
+  // How far along an order is, in plain words.
+  const progressOf = (o) => {
+    const live = (componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at && pieceState(c) !== "removed");
+    if (!live.length || live.every((c) => pieceState(c) === "not_started")) return "not_started";
+    return live.some((c) => pieceState(c) === "finished") ? "part_done" : "in_work";
+  };
 
   // Client orders only: website and stock orders are not promised by a date,
   // the same rule Today and Orders use.
-  const running = useMemo(() => orders.filter((o) => isRunning(o) && hasPromise(o) && (!channels.length || channels.includes(channelOf(o)))), [orders, channels]);
+  const running = useMemo(() => orders.filter((o) => isRunning(o) && hasPromise(o) && (!channels.length || channels.includes(channelOf(o)))
+    && (!urgentOnly || isUrgent(o)) && (!progress.length || progress.includes(progressOf(o)))), [orders, channels, urgentOnly, progress]); // eslint-disable-line react-hooks/exhaustive-deps
   const channelList = useMemo(() => [...new Set(orders.filter((o) => isRunning(o) && hasPromise(o)).map(channelOf))].sort(), [orders]);
   const livePieces = (o) => (componentsByOrder[o.id] || []).filter((c) => !c.cancelled_at && pieceState(c) !== "removed");
 
@@ -115,12 +124,12 @@ export default function PlanningPage({ ctx }) {
   const noDate = running.filter((o) => !dueDay(o));
   const pieces14 = load.reduce((s, r) => s + r.total, 0);
   const shift = (n) => setMonth((p) => { const d = new Date(p.y, p.m + n, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
-  const chName = channels.length ? channels.join(", ") : "All client orders";
+  const chName = [channels.length ? channels.join(", ") : "All client orders", urgentOnly && "urgent only", progress.length && `${progress.length} progress filter${progress.length > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
 
   return (
     <div className="ceo-page">
       <PageHead title="Planning" desc="What is due when, by the warehouse date (two days before the client's delivery date). Client orders only; website and stock orders are not promised by a date. Click a day, a bar or a stage to see what is behind it.">
-        <FilterButton count={channels.length ? 1 : 0} onClick={() => setDrawer(true)} />
+        <FilterButton count={(channels.length ? 1 : 0) + (urgentOnly ? 1 : 0) + (progress.length ? 1 : 0)} onClick={() => setDrawer(true)} />
       </PageHead>
       <div className="ceo-tiles">
         <Tile icon="bell" label="Due This Week" value={num(week.length)} note={chName} onClick={() => openOrders({ title: "Due This Week", sub: "Running orders due in the next 7 days", orders: week })} />
@@ -188,7 +197,9 @@ export default function PlanningPage({ ctx }) {
         </Card>
       </div>
 
-      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => setChannels([])} count={running.length} noun="running orders" sub="Plan for some channels only">
+      <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setChannels([]); setUrgentOnly(false); setProgress([]); }} count={running.length} noun="running orders" sub="Plan for some orders only">
+        <FilterGroup label="Priority"><Chips options={[{ value: "urgent", label: "Urgent only" }]} value={urgentOnly ? "urgent" : ""} onChange={(v) => setUrgentOnly(v === "urgent")} /></FilterGroup>
+        <FilterGroup label="Progress"><Chips options={[{ value: "not_started", label: "Not started" }, { value: "in_work", label: "In work, nothing finished" }, { value: "part_done", label: "Some pieces finished" }]} value={progress} onChange={setProgress} /></FilterGroup>
         <FilterGroup label="Channel"><Chips options={channelList.map((c) => ({ value: c, label: c }))} value={channels} onChange={setChannels} /></FilterGroup>
       </FilterDrawer>
     </div>
