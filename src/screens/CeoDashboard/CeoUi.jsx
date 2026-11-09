@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { Icon } from "../StockRoom/StockRoomUi";
@@ -157,7 +157,7 @@ export function Tile({ label, value, title, delta, inverse, note, icon, onClick,
 
 export function Spark({ data, dataKey = "revenue" }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 1, height: 1 }}>
       <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
         <Area type="monotone" dataKey={dataKey} stroke="#b8922e" strokeWidth={1.5} fill="#b8922e" fillOpacity={0.12} isAnimationActive={false} />
       </AreaChart>
@@ -181,6 +181,46 @@ const ChartTip = ({ active, payload, label, money = true }) => {
 };
 
 const axis = { fontSize: 11, fill: "#8a8478" };
+
+// ------------------------------------------------------------ CHART LABELS
+// Every chart shows its numbers on the chart itself, so it reads without
+// hovering. Labels step aside when they would not fit or would crowd.
+const LABEL_INK = "#4a3f2c";
+/** Dark text on a light fill, white on a dark one. */
+export const textOn = (hex) => {
+  const h = String(hex || "").replace("#", "");
+  if (h.length < 6) return LABEL_INK;
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 165 ? "#3d3220" : "#fff";
+};
+/** The value above a bar (or a stack). Skipped when the bar is too thin for text. */
+export const barValueLabel = (format = num) => ({ x, y, width, value }) => (
+  value && width >= 16
+    ? <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={LABEL_INK} pointerEvents="none">{format(value)}</text>
+    : null
+);
+/** Point labels on a line: every point up to 12, otherwise the highest and the latest. */
+export const pointValueLabel = (data, valueKey, format = num) => {
+  const vals = (data || []).map((d) => Number(d[valueKey]) || 0);
+  const maxIdx = vals.indexOf(Math.max(...vals));
+  const last = vals.length - 1;
+  return ({ x, y, value, index }) => {
+    if (!value) return null;
+    if (vals.length > 12 && index !== maxIdx && index !== last) return null;
+    return <text x={x} y={y - 9} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={LABEL_INK} pointerEvents="none">{format(value)}</text>;
+  };
+};
+/** A donut slice's share, inside the ring, when the slice is big enough to hold it. */
+const sliceLabel = (colorAt) => ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
+  if (percent < 0.06) return null;
+  const r = innerRadius + (outerRadius - innerRadius) / 2;
+  const rad = (-midAngle * Math.PI) / 180;
+  return (
+    <text x={cx + r * Math.cos(rad)} y={cy + r * Math.sin(rad)} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={600} fill={textOn(colorAt(index))} pointerEvents="none">
+      {`${Math.round(percent * 100)}%`}
+    </text>
+  );
+};
 const pickFrom = (handler) => (state) => {
   const row = state?.activePayload?.[0]?.payload;
   if (row && handler) handler(row);
@@ -191,8 +231,8 @@ export function TrendChart({ data, height = 280, onPick }) {
   if (!data?.length) return <Empty />;
   return (
     <div style={{ width: "100%", height, cursor: onPick ? "pointer" : undefined }}>
-      <ResponsiveContainer>
-        <ComposedChart data={data} margin={{ top: 8, right: 6, left: 0, bottom: 0 }} onClick={pickFrom(onPick)}>
+      <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
+        <ComposedChart data={data} margin={{ top: 22, right: 14, left: 0, bottom: 0 }} onClick={pickFrom(onPick)}>
           <defs>
             <linearGradient id="ceoRevenue" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#c9a23e" stopOpacity={0.4} />
@@ -203,7 +243,9 @@ export function TrendChart({ data, height = 280, onPick }) {
           <XAxis dataKey="label" tick={axis} axisLine={false} tickLine={false} minTickGap={22} />
           <YAxis tickFormatter={(v) => shortInr(v).replace("₹", "")} tick={axis} axisLine={false} tickLine={false} width={44} />
           <Tooltip content={<ChartTip />} />
-          <Area type="monotone" dataKey="revenue" name="Sales" stroke="#b8922e" strokeWidth={2.4} fill="url(#ceoRevenue)" isAnimationActive={false} />
+          <Area type="monotone" dataKey="revenue" name="Sales" stroke="#b8922e" strokeWidth={2.4} fill="url(#ceoRevenue)" isAnimationActive={false}>
+            <LabelList dataKey="revenue" content={pointValueLabel(data, "revenue", shortInr)} />
+          </Area>
           {data.some((d) => d.previous != null) && (
             <Line type="monotone" dataKey="previous" name="Previous period" stroke="#b9b3a4" strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} />
           )}
@@ -213,16 +255,17 @@ export function TrendChart({ data, height = 280, onPick }) {
   );
 }
 
-export function Donut({ data, center, sub, height = 220, valueKey = "value", money = true, onPick }) {
+export function Donut({ data, center, sub, height = 220, valueKey = "value", money = true, onPick, colorOf }) {
   const rows = (data || []).filter((d) => Number(d[valueKey]) > 0);
   if (!rows.length) return <Empty />;
   return (
     <div className="ceo-donut" style={{ height }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
         <PieChart>
           <Pie data={rows} dataKey={valueKey} nameKey="name" innerRadius="66%" outerRadius="96%" paddingAngle={2} stroke="none" isAnimationActive={false}
-            onClick={onPick ? (d) => onPick(d.payload?.payload || d) : undefined} style={onPick ? { cursor: "pointer" } : undefined}>
-            {rows.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+            onClick={onPick ? (d) => onPick(d.payload?.payload || d) : undefined} style={onPick ? { cursor: "pointer" } : undefined}
+            labelLine={false} label={sliceLabel((i) => (colorOf && colorOf(rows[i])) || PALETTE[i % PALETTE.length])}>
+            {rows.map((r, i) => <Cell key={i} fill={(colorOf && colorOf(r)) || PALETTE[i % PALETTE.length]} />)}
           </Pie>
           <Tooltip content={<ChartTip money={money} />} />
         </PieChart>
@@ -268,14 +311,15 @@ export function Columns({ data, valueKey = "value", labelKey = "name", name = "R
   if (!data?.length) return <Empty />;
   return (
     <div style={{ width: "100%", height, cursor: onPick ? "pointer" : undefined }}>
-      <ResponsiveContainer>
-        <BarChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} onClick={pickFrom(onPick)}>
+      <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
+        <BarChart data={data} margin={{ top: 22, right: 4, left: 0, bottom: 0 }} onClick={pickFrom(onPick)}>
           <CartesianGrid stroke="#f1ede2" vertical={false} />
           <XAxis dataKey={labelKey} tick={axis} axisLine={false} tickLine={false} minTickGap={6} />
           <YAxis tickFormatter={(v) => (money ? shortInr(v).replace("₹", "") : v)} tick={axis} axisLine={false} tickLine={false} width={44} />
           <Tooltip content={<ChartTip money={money} />} cursor={{ fill: "rgba(184,146,46,.07)" }} />
           <Bar dataKey={valueKey} name={name} radius={[6, 6, 0, 0]} maxBarSize={44} isAnimationActive={false}>
             {data.map((d, i) => <Cell key={i} fill={highlight && highlight(d) ? "#a9821f" : "#e4d3a0"} />)}
+            <LabelList dataKey={valueKey} content={barValueLabel(money ? shortInr : num)} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -600,7 +644,11 @@ export function Drawer({ title, sub, onClose, onBack, children, footer, wide }) 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  return (
+  // Drawn at the top of the dashboard, not inside the page: a fixed panel inside
+  // a scrolling area is clipped to that area on iPhone Safari, so it opened
+  // inside the page instead of over the whole window.
+  const host = typeof document !== "undefined" ? document.querySelector(".ceo") : null;
+  const panel = (
     <div className="ceo-drawer-root" role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : "Details"}>
       <button type="button" className="ceo-drawer-back" aria-label="Close" onClick={onClose} />
       <aside className={`ceo-drawer${wide ? " is-wide" : ""}`}>
@@ -621,6 +669,7 @@ export function Drawer({ title, sub, onClose, onBack, children, footer, wide }) 
       </aside>
     </div>
   );
+  return host ? createPortal(panel, host) : panel;
 }
 
 export function FilterGroup({ label, children }) {

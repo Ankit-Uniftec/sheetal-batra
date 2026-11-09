@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import formatDate from "../../utils/formatDate";
 import { buildCancellationRows, fetchCancellations } from "../../utils/cancellationAnalytics";
 import { orderRevenue, shortInr } from "./ceoInsights";
 import {
-  Card, Chips, Columns, Delta, Donut, Drawer, Empty, FilterGroup, fullInr, Icon, Insight, num, PageHead, Pager, PALETTE, RankBars, SalesCalendar, SearchBox, Select, Table, Thumb, Tile, TrendChart,
+  Card, Chips, Columns, Delta, Donut, Drawer, Empty, FilterGroup, fullInr, Icon, Insight, num, PageHead, Pager, PALETTE, RankBars, SalesCalendar, SearchBox, Select, Table, Thumb, Tile, TrendChart, barValueLabel, pointValueLabel,
 } from "./CeoUi";
 
 // ============================================================
@@ -376,12 +376,14 @@ export function RevenuePage({ ctx }) {
           {aovTrend.length < 2 ? <Empty text="Choose a longer period to see this trend." /> : (
             <div style={{ height: 230 }}>
               <ResponsiveContainer>
-                <LineChart data={aovTrend} margin={{ top: 8, right: 6, left: 0, bottom: 0 }}>
+                <LineChart data={aovTrend} margin={{ top: 22, right: 14, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="#f1ede2" vertical={false} />
                   <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} minTickGap={22} />
                   <YAxis tickFormatter={(v) => shortInr(v).replace("₹", "")} tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} width={44} />
                   <Tooltip formatter={(v) => fullInr(v)} />
-                  <Line type="monotone" dataKey="aov" name="Average Order Value" stroke="#7b3a5e" strokeWidth={2.2} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="aov" name="Average Order Value" stroke="#7b3a5e" strokeWidth={2.2} dot={false} isAnimationActive={false}>
+                    <LabelList dataKey="aov" content={pointValueLabel(aovTrend, "aov", shortInr)} />
+                  </Line>
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -477,12 +479,16 @@ export function StoresPage({ ctx }) {
           {store.dailySalesData.length === 0 ? <Empty /> : (
             <div style={{ height: 260 }}>
               <ResponsiveContainer>
-                <BarChart data={store.dailySalesData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+                <BarChart data={store.dailySalesData} margin={{ top: 22, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="#f1ede2" vertical={false} />
                   <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} minTickGap={18} />
                   <YAxis tickFormatter={(v) => shortInr(v).replace("₹", "")} tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} width={44} />
                   <Tooltip formatter={(v) => fullInr(v)} />
-                  {store.storeNames.map((name, i) => <Bar key={name} dataKey={name} stackId="a" fill={PALETTE[i % PALETTE.length]} maxBarSize={30} isAnimationActive={false} />)}
+                  {store.storeNames.map((name, i) => (
+                    <Bar key={name} dataKey={name} stackId="a" fill={PALETTE[i % PALETTE.length]} maxBarSize={30} isAnimationActive={false}>
+                      {i === store.storeNames.length - 1 && <LabelList dataKey={(d) => store.storeNames.reduce((s, n) => s + (Number(d[n]) || 0), 0)} content={barValueLabel(shortInr)} />}
+                    </Bar>
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             </div>

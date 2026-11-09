@@ -45,6 +45,7 @@ const StoreManagerDashboard = lazy(() => import("./screens/StoreManagerDashboard
 const CeoAssistantDashboard = lazy(() => import("./screens/CeoAssistantDashboard/CeoAssistantDashboard"));
 const AssistantCmoDashboard = lazy(() => import("./screens/AssistantCmoDashboard/AssistantCmoDashboard"));
 const CommsDashboard = lazy(() => import("./screens/CommsDashboard/CommsDashboard"));
+const CommsDashboardClassic = lazy(() => import("./screens/CommsDashboard/CommsDashboardClassic"));
 const WalkInDashboard = lazy(() => import("./screens/WalkInDashboard/WalkInDashboard"));
 const CommsOrderForm = lazy(() => import("./screens/CommsDashboard/CommsOrderForm"));
 const CommsReviewOrder = lazy(() => import("./screens/CommsDashboard/CommsReviewOrder"));
@@ -116,6 +117,7 @@ function App() {
         <Route path="/ceo-assistant-dashboard" element={<PrivateRoute><CeoAssistantDashboard /></PrivateRoute>} />
         <Route path="/assistant-cmo-dashboard" element={<PrivateRoute><AssistantCmoDashboard /></PrivateRoute>} />
         <Route path="/comms-dashboard" element={<PrivateRoute><CommsDashboard /></PrivateRoute>} />
+        <Route path="/comms-dashboard/classic" element={<PrivateRoute><CommsDashboardClassic /></PrivateRoute>} />
         <Route path="/walkin-dashboard" element={<PrivateRoute><WalkInDashboard /></PrivateRoute>} />
         <Route path="/comms-order-form" element={<PrivateRoute><CommsOrderForm /></PrivateRoute>} />
         <Route path="/comms-review-order" element={<PrivateRoute><CommsReviewOrder /></PrivateRoute>} />

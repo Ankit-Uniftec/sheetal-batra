@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { supabase } from "../../lib/supabaseClient";
 import formatDate from "../../utils/formatDate";
 
@@ -38,23 +39,11 @@ export default function CommsPRPerformance({ orders, showPopup }) {
   const [prRecords, setPrRecords] = useState({});
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // { order, record }
-  const [saving, setSaving] = useState(false);
 
   // List filters
   const [search, setSearch] = useState("");
   const [engagementFilter, setEngagementFilter] = useState("all");
   const [capturedFilter, setCapturedFilter] = useState("all");
-
-  // Form state
-  const [outfitUsed, setOutfitUsed] = useState("");
-  const [deliverablesReceived, setDeliverablesReceived] = useState("");
-  const [coverageType, setCoverageType] = useState([]);
-  const [coverageLinks, setCoverageLinks] = useState("");
-  const [estimatedReach, setEstimatedReach] = useState("");
-  const [estimatedReachNumber, setEstimatedReachNumber] = useState("");
-  const [estimatedImpressions, setEstimatedImpressions] = useState("");
-  const [remarks, setRemarks] = useState("");
-  const [outcomeImpact, setOutcomeImpact] = useState("");
 
   // Eligible orders (Barter / Gifting / Sourcing) — skip Personal.
   const eligibleOrders = useMemo(
@@ -108,84 +97,9 @@ export default function CommsPRPerformance({ orders, showPopup }) {
     return list;
   }, [eligibleOrders, prRecords, search, engagementFilter, capturedFilter]);
 
-  const openEdit = (order) => {
-    const record = prRecords[order.id] || null;
-    setOutfitUsed(record?.outfit_used === true ? "Yes" : record?.outfit_used === false ? "No" : "");
-    setDeliverablesReceived(record?.deliverables_received || "");
-    setCoverageType(record?.coverage_type || []);
-    setCoverageLinks((record?.coverage_links || []).join("\n"));
-    setEstimatedReach(record?.estimated_reach || "");
-    setEstimatedReachNumber(record?.estimated_reach_number || "");
-    setEstimatedImpressions(record?.estimated_impressions || "");
-    setRemarks(record?.remarks || "");
-    setOutcomeImpact(record?.outcome_impact || "");
-    setEditing({ order, record });
-  };
-
-  const closeEdit = () => {
-    if (saving) return;
-    setEditing(null);
-  };
-
-  const toggleCoverage = (type) => {
-    setCoverageType((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
-  };
-
-  const handleSave = async () => {
-    if (!editing) return;
-    setSaving(true);
-    try {
-      // Parse coverage_links from newline-separated text into array.
-      const linksArray = coverageLinks
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-      // Map outfit_used "Yes"/"No"/"" → boolean | null
-      const outfitUsedValue = outfitUsed === "Yes" ? true : outfitUsed === "No" ? false : null;
-
-      const payload = {
-        order_id: editing.order.id,
-        outfit_used: outfitUsedValue,
-        deliverables_received: deliverablesReceived || null,
-        coverage_type: coverageType.length > 0 ? coverageType : null,
-        coverage_links: linksArray.length > 0 ? linksArray : null,
-        coverage_images: editing.record?.coverage_images || null, // image upload UI TBD
-        estimated_reach: estimatedReach || null,
-        estimated_reach_number: estimatedReachNumber ? Number(estimatedReachNumber) : null,
-        estimated_impressions: estimatedImpressions ? Number(estimatedImpressions) : null,
-        remarks: remarks.trim() || null,
-        outcome_impact: outcomeImpact || null,
-      };
-
-      const { data, error } = await supabase
-        .from("comms_pr_performance")
-        .upsert(payload, { onConflict: "order_id" })
-        .select()
-        .single();
-      if (error) throw error;
-
-      setPrRecords((prev) => ({ ...prev, [editing.order.id]: data }));
-      setEditing(null);
-      showPopup({
-        title: "PR data saved",
-        message: `PR performance for ${editing.order.order_no} updated.`,
-        type: "success",
-        confirmText: "OK",
-      });
-    } catch (err) {
-      console.error("PR save failed:", err);
-      showPopup({
-        title: "Save failed",
-        message: err.message || "Could not save PR data.",
-        type: "error",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
+  // Edit opens the shared PrEditModal below (also used by the new Comms
+  // dashboard), so a PR record is saved the same way everywhere.
+  const openEdit = (order) => setEditing({ order, record: prRecords[order.id] || null });
 
   if (loading) {
     return <div className="comms-card"><p className="comms-muted">Loading PR records…</p></div>;
@@ -297,6 +211,134 @@ export default function CommsPRPerformance({ orders, showPopup }) {
 
       {/* Edit modal */}
       {editing && (
+        <PrEditModal
+          order={editing.order}
+          record={editing.record}
+          showPopup={showPopup}
+          onClose={() => setEditing(null)}
+          onSaved={(row) => setPrRecords((prev) => ({ ...prev, [row.order_id]: row }))}
+        />
+      )}
+    </>
+  );
+}
+
+// Small helper for label+control pairs in the modal.
+function PrField({ label, children, style }) {
+  return (
+    <div style={style}>
+      <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+const filterSelectStyle = {
+  padding: "8px 12px",
+  border: "1px solid #d4d4d4",
+  borderRadius: 8,
+  fontSize: 13,
+  fontFamily: "inherit",
+  background: "#fff",
+  color: "#333",
+};
+
+const modalInputStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid #d4d4d4",
+  borderRadius: 6,
+  fontSize: 13,
+  fontFamily: "inherit",
+  background: "#fff",
+  color: "#333",
+};
+
+
+/**
+ * Capture or update the PR record for one order: outfit used, deliverables,
+ * coverage, reach, impressions, remarks and impact (comms_pr_performance,
+ * one row per order). Drawn over the whole window so any dashboard can open it.
+ */
+export function PrEditModal({ order, record = null, showPopup, onClose, onSaved }) {
+  const [saving, setSaving] = useState(false);
+  const [outfitUsed, setOutfitUsed] = useState(record?.outfit_used === true ? "Yes" : record?.outfit_used === false ? "No" : "");
+  const [deliverablesReceived, setDeliverablesReceived] = useState(record?.deliverables_received || "");
+  const [coverageType, setCoverageType] = useState(record?.coverage_type || []);
+  const [coverageLinks, setCoverageLinks] = useState((record?.coverage_links || []).join("\n"));
+  const [estimatedReach, setEstimatedReach] = useState(record?.estimated_reach || "");
+  const [estimatedReachNumber, setEstimatedReachNumber] = useState(record?.estimated_reach_number || "");
+  const [estimatedImpressions, setEstimatedImpressions] = useState(record?.estimated_impressions || "");
+  const [remarks, setRemarks] = useState(record?.remarks || "");
+  const [outcomeImpact, setOutcomeImpact] = useState(record?.outcome_impact || "");
+
+  const closeEdit = () => {
+    if (saving) return;
+    onClose();
+  };
+
+  const toggleCoverage = (type) => {
+    setCoverageType((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // Parse coverage_links from newline-separated text into array.
+      const linksArray = coverageLinks
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      // Map outfit_used "Yes"/"No"/"" → boolean | null
+      const outfitUsedValue = outfitUsed === "Yes" ? true : outfitUsed === "No" ? false : null;
+
+      const payload = {
+        order_id: order.id,
+        outfit_used: outfitUsedValue,
+        deliverables_received: deliverablesReceived || null,
+        coverage_type: coverageType.length > 0 ? coverageType : null,
+        coverage_links: linksArray.length > 0 ? linksArray : null,
+        coverage_images: record?.coverage_images || null, // image upload UI TBD
+        estimated_reach: estimatedReach || null,
+        estimated_reach_number: estimatedReachNumber ? Number(estimatedReachNumber) : null,
+        estimated_impressions: estimatedImpressions ? Number(estimatedImpressions) : null,
+        remarks: remarks.trim() || null,
+        outcome_impact: outcomeImpact || null,
+      };
+
+      const { data, error } = await supabase
+        .from("comms_pr_performance")
+        .upsert(payload, { onConflict: "order_id" })
+        .select()
+        .single();
+      if (error) throw error;
+
+      onSaved(data);
+      onClose();
+      showPopup({
+        title: "PR data saved",
+        message: `PR performance for ${order.order_no} updated.`,
+        type: "success",
+        confirmText: "OK",
+      });
+    } catch (err) {
+      console.error("PR save failed:", err);
+      showPopup({
+        title: "Save failed",
+        message: err.message || "Could not save PR data.",
+        type: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
         <div
           style={{
             position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
@@ -311,9 +353,9 @@ export default function CommsPRPerformance({ orders, showPopup }) {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ marginTop: 0, color: "#d5b85a" }}>PR Performance — {editing.order.order_no}</h3>
+            <h3 style={{ marginTop: 0, color: "#d5b85a" }}>PR Performance — {order.order_no}</h3>
             <p style={{ fontSize: 13, color: "#555" }}>
-              <strong>Client:</strong> {editing.order.delivery_name || "—"} · <strong>Engagement:</strong> {editing.order.comms_engagement_type}
+              <strong>Client:</strong> {order.delivery_name || "—"} · <strong>Engagement:</strong> {order.comms_engagement_type}
             </p>
 
             <div className="cro-grid-2" style={{ marginTop: 16 }}>
@@ -429,40 +471,5 @@ export default function CommsPRPerformance({ orders, showPopup }) {
             </div>
           </div>
         </div>
-      )}
-    </>
-  );
+  , document.body);
 }
-
-// Small helper for label+control pairs in the modal.
-function PrField({ label, children, style }) {
-  return (
-    <div style={style}>
-      <label style={{ fontSize: 12, fontWeight: 600, color: "#555", display: "block", marginBottom: 5 }}>
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-const filterSelectStyle = {
-  padding: "8px 12px",
-  border: "1px solid #d4d4d4",
-  borderRadius: 8,
-  fontSize: 13,
-  fontFamily: "inherit",
-  background: "#fff",
-  color: "#333",
-};
-
-const modalInputStyle = {
-  width: "100%",
-  padding: "8px 10px",
-  border: "1px solid #d4d4d4",
-  borderRadius: 6,
-  fontSize: 13,
-  fontFamily: "inherit",
-  background: "#fff",
-  color: "#333",
-};

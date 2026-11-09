@@ -50,7 +50,11 @@ const downloadCsv = (filename, headers, rows) => {
   URL.revokeObjectURL(url);
 };
 
-export default function CommsReports({ orders, showPopup }) {
+/**
+ * The three monthly Comms reports: Agency & Individual, Personal orders and PR
+ * Performance. Shared by the old Reports tab and the new Comms dashboard.
+ */
+export function useCommsReports(orders, showPopup) {
   const monthOptions = useMemo(buildMonthOptions, []);
   const [selectedMonth, setSelectedMonth] = useState(monthOptions[1]?.value || "all"); // default = current month
   const [prLoading, setPrLoading] = useState(false);
@@ -253,6 +257,11 @@ export default function CommsReports({ orders, showPopup }) {
     }
   };
 
+  return { monthOptions, selectedMonth, setSelectedMonth, ordersInPeriod, prLoading, handleExportAgency, handleExportPrivate, handleExportPrPerformance };
+}
+
+export default function CommsReports({ orders, showPopup }) {
+  const { monthOptions, selectedMonth, setSelectedMonth, ordersInPeriod, prLoading, handleExportAgency, handleExportPrivate, handleExportPrPerformance } = useCommsReports(orders, showPopup);
   return (
     <>
       <div className="comms-card" style={{ marginBottom: 14 }}>
