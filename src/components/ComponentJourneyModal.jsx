@@ -471,39 +471,62 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                         <div className="cjm-section-row">
                           <p className="cjm-section-title">Journey</p>
                           <span className="cjm-legend">
-                            <span><i className="is-done" />Done</span><span><i className="is-current" />Now</span><span><i className="is-skipped" />Skipped (not needed)</span><span><i className="is-todo" />To come</span>
+                            <span><i className="is-done" />Done</span><span><i className="is-current" />Now</span><span><i className="is-skipped" />Skipped</span><span><i className="is-todo" />To come</span>
                           </span>
                         </div>
-                        <ol className="cjm-track" style={{ "--steps": STEP_LIST.length }}>
-                          {(() => {
-                            const stats = stageStats(transitions, movements, c);
-                            let nextMarked = false;
-                            return STEP_LIST.map((g, i) => {
-                              const isCurrent = i === st.idx && !st.stopped && c.current_stage !== "dispatched";
-                              const isDone = c.current_stage === "dispatched" ? true : i < st.idx || (st.stopped && i <= st.idx);
-                              const skipped = isDone && !visited.has(i) && i > 0;
-                              const state = isCurrent ? "current" : isDone ? (skipped ? "skipped" : "done") : "todo";
-                              const isNext = state === "todo" && !nextMarked && !st.stopped;
-                              if (isNext) nextMarked = true;
-                              const finished = state === "current" && st.done;
-                              const info = stats[i];
-                              const word = state === "current" ? (finished ? "Finished" : c.is_outside_wh ? "At vendor" : "Now")
-                                : state === "done" ? "Done" : state === "skipped" ? "Skipped" : isNext ? "Up next" : "To come";
-                              const foot = state === "done" && info?.firstAt ? `${shortDate(info.firstAt)}${info.ms >= 60000 ? ` · ${fmtSpan(info.ms)}` : ""}`
-                                : state === "current" ? (finished ? (info?.firstAt ? shortDate(info.firstAt) : "") : st.notStarted ? "Waiting to start" : info?.ms >= 60000 ? `Here ${fmtSpan(info.ms)}` : "Just arrived")
-                                  : "";
-                              return (
-                                <li key={g.key} className={`cjm-node is-${state}${isNext ? " is-next" : ""}${finished ? " is-finished" : ""}`}>
-                                  <span className="cjm-node-dot">{state === "done" || finished ? "✓" : state === "skipped" ? "–" : i + 1}</span>
-                                  <span className="cjm-node-name" title={g.label}>{SHORT_STEP[g.label] || g.label}</span>
-                                  <span className="cjm-node-word">{word}</span>
-                                  {foot && <span className="cjm-node-foot">{foot}</span>}
-                                  {info?.vendor && (state === "done" || state === "current") && <span className="cjm-node-vendor">{info.vendor}</span>}
-                                </li>
-                              );
-                            });
-                          })()}
-                        </ol>
+                        {(() => {
+                          // Each stage's state, worked out once for the line and the details list.
+                          const stats = stageStats(transitions, movements, c);
+                          let nextMarked = false;
+                          const nodes = STEP_LIST.map((g, i) => {
+                            const isCurrent = i === st.idx && !st.stopped && c.current_stage !== "dispatched";
+                            const isDone = c.current_stage === "dispatched" ? true : i < st.idx || (st.stopped && i <= st.idx);
+                            const skipped = isDone && !visited.has(i) && i > 0;
+                            const state = isCurrent ? "current" : isDone ? (skipped ? "skipped" : "done") : "todo";
+                            const isNext = state === "todo" && !nextMarked && !st.stopped;
+                            if (isNext) nextMarked = true;
+                            const finished = state === "current" && st.done;
+                            const info = stats[i];
+                            const word = state === "current" ? (finished ? "Finished" : c.is_outside_wh ? "At vendor" : "Now")
+                              : state === "done" ? "Done" : state === "skipped" ? "Skipped" : isNext ? "Up next" : "To come";
+                            const when = info?.firstAt ? shortDate(info.firstAt) : "";
+                            const spent = state === "current" && !finished
+                              ? (st.notStarted ? "Waiting to start" : info?.ms >= 60000 ? `Here ${fmtSpan(info.ms)}` : "Just arrived")
+                              : info?.ms >= 60000 ? fmtSpan(info.ms) : "";
+                            return { g, i, state, isNext, finished, info, word, when, spent, vendor: info?.vendor || "" };
+                          });
+                          const reached = nodes.filter((n) => n.state === "done" || n.state === "current");
+                          return (
+                            <>
+                              <ol className="cjm-track" style={{ "--steps": STEP_LIST.length }}>
+                                {nodes.map((n) => (
+                                  <li key={n.g.key} className={`cjm-node is-${n.state}${n.isNext ? " is-next" : ""}${n.finished ? " is-finished" : ""}`} title={`${n.g.label}: ${n.word}`}>
+                                    {n.state === "current" && <span className="cjm-node-now">{n.word}</span>}
+                                    <span className="cjm-node-dot">{n.state === "done" || n.finished ? "✓" : n.state === "skipped" ? "–" : n.i + 1}</span>
+                                    <span className="cjm-node-name">{SHORT_STEP[n.g.label] || n.g.label}</span>
+                                    {/* shown only when the line is vertical (small screens) */}
+                                    <span className="cjm-node-word">{n.word}</span>
+                                    {(n.when || n.spent) && <span className="cjm-node-foot">{[n.when, n.spent].filter(Boolean).join(" · ")}</span>}
+                                    {n.vendor && (n.state === "done" || n.state === "current") && <span className="cjm-node-vendor">{n.vendor}</span>}
+                                  </li>
+                                ))}
+                              </ol>
+                              {reached.length > 0 && (
+                                <div className="cjm-stages">
+                                  <div className="cjm-stages-head"><span>Stage</span><span>Reached</span><span>Time Spent</span><span>Vendor</span></div>
+                                  {reached.map((n) => (
+                                    <div key={n.g.key} className={`cjm-stage-row is-${n.state}${n.finished ? " is-finished" : ""}`}>
+                                      <span className="cjm-stage-name"><i />{n.g.label}{n.state === "current" && <em>{n.word}</em>}</span>
+                                      <span>{n.when || "–"}</span>
+                                      <span>{n.spent || "–"}</span>
+                                      <span className="cjm-stage-vendor">{n.vendor || "–"}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </section>
 
                       {/* Vendor trips — every time this piece left the warehouse */}
