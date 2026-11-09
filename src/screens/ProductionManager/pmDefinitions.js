@@ -27,6 +27,13 @@ export const TILE_INFO = {
   "Delivered On Time": "Share of orders delivered in the period on or before the client's delivery date.",
   Cancelled: "Orders cancelled in the period.",
   "Pieces Pulled": "Pieces taken off the floor because their order was cancelled, in the period.",
+  "Total Orders": "Every order on record across all channels (unapproved B2B orders are not counted). Click to see them.",
+  "Total Pieces": "Every garment piece on those orders; cancelled pieces are left out.",
+  "Production Load": "Orders in production as a share of active orders. Active: not delivered, completed or cancelled. In production: active, not dispatched, with at least one piece started.",
+  "Order Received": "Running orders where no piece has been started yet: every piece is still at Order Received.",
+  "Return Rate": "Returns as a share of orders that count as sales (not cancelled, revoked, returned or refunded).",
+  Returns: "Orders with a return reason, returned items, or status Returned.",
+  Exchanges: "Orders where an exchange was requested (an exchange date or reason is recorded).",
 };
 
 export const CARD_INFO = {
@@ -39,6 +46,9 @@ export const CARD_INFO = {
   "Stuck by Stage": "Pieces past their stage time limit, by stage, with how long they have been over.",
   "Oldest Running Orders": "Running orders that were placed the longest time ago.",
   "Due Next 7 Days": "Running orders due in the next 7 days, soonest first.",
+  "Orders by Channel": "Every order on record by where it was placed, with its share of all orders.",
+  "All vs Late Orders by Channel": "Every order in each channel against its running orders past their due date (two days before the client's delivery date). Website and stock orders are never late because they are not promised by a date.",
+  "Top Sellers": "Pieces ordered (item quantity) by product, colour and size, over orders placed in the period. Cancelled, revoked, returned and refunded orders are left out. Store is B2B for B2B orders, otherwise the salesperson's store. Colour is the top colour, else the colour, else the bottom colour.",
 };
 
 export const COLUMN_INFO = {

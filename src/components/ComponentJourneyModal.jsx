@@ -200,10 +200,10 @@ const StationIcon = () => (
   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8" strokeLinecap="round" /></svg>
 );
 
-const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
+const ComponentJourneyModal = ({ orderNo, components = [], onClose, initialComponentId = null }) => {
   const [journeyData, setJourneyData] = useState([]); // [{ component, transitions, movements }]
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(initialComponentId);
   // Half Made Inventory (Release 15): production logins can move a piece out
   // to it, or let a not-started piece continue from a half-made one.
   const [me, setMe] = useState({ email: null, role: null });

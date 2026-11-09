@@ -78,7 +78,7 @@ export function StackBars({ data, series, height = 260, format = num, onPick, st
             <Bar key={s.key} dataKey={s.key} name={s.name} stackId={stacked ? "a" : undefined} fill={s.color} maxBarSize={44}
               radius={!stacked || i === last ? [6, 6, 0, 0] : [0, 0, 0, 0]} isAnimationActive={false}
               onClick={onPick ? (bar) => onPick(bar?.payload || bar, s.key) : undefined}>
-              {series.length > 1 && <LabelList dataKey={s.key} content={inside(s.color)} />}
+              {series.length > 1 && stacked && <LabelList dataKey={s.key} content={inside(s.color)} />}
               {(!stacked || i === last) && (
                 <LabelList
                   dataKey={stacked ? (d) => series.reduce((sum, x) => sum + (Number(d[x.key]) || 0), 0) : s.key}
@@ -268,12 +268,12 @@ export default function QualityPage({ ctx }) {
             </Card>
 
             <Card span={6} md={12} title="Why Pieces Fail" sub="The reasons as written. Click one to see its pieces">
-              <RankBars rows={data.reasons} limit={10} format={(v) => plural(v, "failure")} sub={(r) => `${pct(r.value, data.fails.length)}% of failures`}
+              <RankBars rows={data.reasons} limit={6} format={(v) => plural(v, "failure")} sub={(r) => `${pct(r.value, data.fails.length)}% of failures`}
                 onRow={(r) => openRows(`Failed: ${r.name}`, label, r.rows)} />
             </Card>
 
             <Card span={6} md={12} title="Where Failed Pieces Went Back To" sub="The stage each failed piece was sent back to">
-              <RankBars rows={data.backTo} limit={10} format={(v) => plural(v, "piece")} sub={(r) => `${pct(r.value, data.backTo.reduce((s, x) => s + x.value, 0))}% of re-work`}
+              <RankBars rows={data.backTo} limit={6} format={(v) => plural(v, "piece")} sub={(r) => `${pct(r.value, data.backTo.reduce((s, x) => s + x.value, 0))}% of re-work`}
                 onRow={(r) => openRows(`Sent Back to ${r.name}`, label, r.rows)} />
             </Card>
 

@@ -8,7 +8,6 @@ import useTabParam from "../../hooks/useTabParam";
 import NotificationBell from "../../components/NotificationBell";
 import LogoLoader from "../../components/LogoLoader";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
-import ComponentStageBadge from "../../components/ComponentStageBadge";
 import useHalfMadeSuggestions from "../../hooks/useHalfMadeSuggestions";
 import { runManualCompleteWithOverride, describeBlocking } from "../../utils/manualComplete";
 import { cancelOrder } from "../../utils/cancelOrder";
@@ -19,7 +18,6 @@ import { fetchQcRecords } from "../../utils/qcHistory";
 import { fetchReJourneys } from "../../utils/reJourneys";
 import { listHalfMade } from "../../utils/halfMade";
 import { loadLedger, loadSales, loadStockOrders, loadStockRoomCatalogue } from "../StockRoom/stockRoomData";
-import { getStagesOutsideLabel } from "../../utils/barcodeService";
 import { fetchAllRowsParallel } from "../../utils/fetchAllRowsParallel";
 import Logo from "../../images/logo.png";
 import { CalendarIcon, Chips, DateRange, Drawer, FilterGroup, GlobalSearch, Icon, MenuIcon, PageHead, Thumb, num } from "../CeoDashboard/CeoUi";
@@ -35,6 +33,9 @@ import { OrdersTable, PiecesTable, orderStatus, piecesLine } from "./PmCommon";
 import { DEFAULT_PERIOD, PM_PERIODS, pmPeriod } from "./pmPeriod";
 import { PmCancelModal, PmEditOrderModal, PmPriorityModal } from "./PmModals";
 import { HalfMadeButton, PmCompletePicker } from "./PmPicker";
+import { PhotoView, PieceRow, useColourHex } from "./PmOrderRows";
+import { DisposedStrip } from "./PmOrderRows";
+import { isDisposalRecord, priorityOf, shopifyNo } from "./pmModel";
 import TodayPage from "./PmToday";
 import OrdersPage from "./PmOrders";
 import FloorPage from "./PmFloor";
@@ -323,13 +324,13 @@ export default function PmDashboard() {
   const piecesById = useMemo(() => Object.fromEntries(components.map((c) => [c.id, c])), [components]);
 
   // ------------------------------------------------------------ actions
-  const openJourney = (order) => {
+  const openJourney = (order, componentId = null) => {
     const comps = componentsByOrder[order.id] || [];
     if (!comps.length) {
       showPopup({ title: "No Pieces Yet", message: `${order.order_no} has no barcoded pieces yet, so there is no journey to show.`, type: "info", confirmText: "Ok" });
       return;
     }
-    setJourney({ orderNo: order.order_no, components: comps, orderId: order.id });
+    setJourney({ orderNo: order.order_no, components: comps, orderId: order.id, componentId });
   };
 
   const warehousePdf = async (order) => {
@@ -654,7 +655,7 @@ export default function PmDashboard() {
       </div>
 
       {journey && createPortal(
-        <ComponentJourneyModal orderNo={journey.orderNo} components={journey.components} onClose={() => { const id = journey.orderId; setJourney(null); reloadOrder(id); }} />,
+        <ComponentJourneyModal orderNo={journey.orderNo} components={journey.components} initialComponentId={journey.componentId} onClose={() => { const id = journey.orderId; setJourney(null); reloadOrder(id); }} />,
         document.body,
       )}
       {picker && (
@@ -673,27 +674,6 @@ export default function PmDashboard() {
   );
 }
 
-const MEASURE_LABELS = {
-  KurtaChogaKaftan: "Kurta / Choga / Kaftan", Blouse: "Blouse", Anarkali: "Anarkali", SalwarDhoti: "Salwar / Dhoti",
-  ChuridaarTrouserPantsPlazo: "Churidaar / Trouser / Pants / Plazo", ShararaGharara: "Sharara / Gharara", Lehenga: "Lehenga",
-};
-/** The client's measurements on a product, grouped by garment, in inches. */
-function Measurements({ m }) {
-  const groups = Object.entries(m || {}).filter(([, f]) => f && typeof f === "object" && Object.values(f).some((v) => v !== "" && v != null));
-  if (!groups.length) return <small className="pm-muted">No measurements recorded (standard size).</small>;
-  return (
-    <div className="pm-measure">
-      {groups.map(([k, f]) => (
-        <div key={k} className="pm-measure-group">
-          <span>{MEASURE_LABELS[k] || k} (in)</span>
-          <div className="pm-measure-chips">
-            {Object.entries(f).filter(([, v]) => v !== "" && v != null).map(([name, v]) => <i key={name}><small>{name}</small>{v}</i>)}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /** This order's own requests waiting for a decision, and its QC checks. */
 function OrderChecks({ order: o, ctx }) {
@@ -744,6 +724,8 @@ function OrderChecks({ order: o, ctx }) {
 
 /** One order in the side panel: where it stands, its pieces, and every action. */
 function OrderDrawer({ order: o, ctx, onClose, onBack }) {
+  const hexOf = useColourHex();
+  const [photo, setPhoto] = useState(null);
   const comps = ctx.componentsByOrder[o.id] || [];
   const live = comps.filter((c) => !c.cancelled_at);
   const finished = live.filter((c) => pieceState(c) === "finished").length;
@@ -755,8 +737,16 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
   const busy = (k) => actions.busy === `${o.id}-${k}`;
   const canAct = running && String(o.status || "").toLowerCase() !== "cancelled";
   const who = clientOf(o, ctx.vendorMap);
+  // Why pieces were disposed, from the QC ledger (loaded once, then kept).
+  const { need } = ctx;
+  useEffect(() => { need("qcAll"); }, [need]);
+  const qcRows = ctx.lazy?.qcAll?.rows;
+  const disposed = useMemo(() => (qcRows || []).filter((r) => r.order_id === o.id && isDisposalRecord(r))
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)), [qcRows, o.id]);
+  const level = priorityOf(o);
   return (
     <Drawer wide title={o.order_no} sub={[who, channelOf(o)].filter(Boolean).join(" · ")} onClose={onClose} onBack={onBack}>
+      <div className="pm-od">
       <div className="ceo-dstats">
         <Stat label="Status" info="Where the order stands, worked out from its pieces."><b>{status}</b></Stat>
         <Stat label="Due Date" info="The warehouse date: two days before the client's delivery date.">
@@ -789,57 +779,55 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
 
       <div className="pm-od-grid">
       <div className="pm-od-col">
-      <p className="pm-dsection">Pieces</p>
-      <div className="pm-pieces">
-        {!comps.length && <p className="ceo-muted">No barcoded pieces yet.</p>}
-        {comps.map((c) => (
-          <div key={c.id} className={`pm-piece is-${pieceState(c)}`}>
-            <span className="pm-piece-main">
-              <b>{pieceName(c)}</b>
-              <small className="pm-code">{c.barcode}</small>
-            </span>
-            <span className="pm-piece-side">
-              <span className="ceo-keep"><ComponentStageBadge comp={c} look="brand" /></span>
-              {c.is_outside_wh && <small>At {c.vendor_name || "vendor"}{c.stages_outside ? ` · ${getStagesOutsideLabel(c.stages_outside) || ""}` : ""}</small>}
-            </span>
-          </div>
-        ))}
-      </div>
-
       <p className="pm-dsection">Order Details</p>
 
-      <dl className="ceo-dl">
-        <dt>Channel</dt><dd>{channelOf(o)}</dd>
-        {who && <><dt>Client</dt><dd>{who}</dd></>}
-        <dt>Order Date</dt><dd>{formatDate(o.created_at)}</dd>
-        {o.delivery_date && <><dt>Client Delivery Date</dt><dd>{formatDate(o.delivery_date)}</dd></>}
-        {o.mode_of_delivery && <><dt>Delivery Mode</dt><dd>{o.mode_of_delivery}</dd></>}
-        <dt>Priority</dt><dd>{isUrgent(o) ? "Urgent" : "Normal"}</dd>
-        {o.salesperson && <><dt>Salesperson</dt><dd>{o.salesperson}</dd></>}
-        {o.po_number && <><dt>PO Number</dt><dd>{o.po_number}</dd></>}
-        {o.notes && <><dt>Production Notes</dt><dd>{o.notes}</dd></>}
-        {o.cancellation_reason && <><dt>Cancellation Reason</dt><dd>{o.cancellation_reason}</dd></>}
-        <dt>Pieces</dt><dd>{piecesLine(comps)}</dd>
-        <dt>Pieces in total</dt><dd>{num(live.length)}</dd>
-      </dl>
+      <div className="pm-od-details">
+        {[
+          ["Channel", channelOf(o)],
+          ["Shopify No", shopifyNo(o)],
+          ["Client", who],
+          ["Order Date", formatDate(o.created_at)],
+          ["Client Delivery Date", o.delivery_date ? formatDate(o.delivery_date) : null],
+          ["Delivery Mode", o.mode_of_delivery],
+          ["Priority", level === "urgent" ? "Urgent" : level === "high" ? "High" : "Normal"],
+          ["Salesperson", o.salesperson],
+          ["PO Number", o.po_number],
+          ["Pieces", piecesLine(comps)],
+        ].filter(([, v]) => v).map(([k, v]) => <div key={k} className="pm-od-item"><span>{k}</span><b>{v}</b></div>)}
+        {o.notes && <div className="pm-od-item is-wide"><span>Production Notes</span><b>{o.notes}</b></div>}
+        {o.cancellation_reason && <div className="pm-od-item is-wide"><span>Cancellation Reason</span><b>{o.cancellation_reason}</b></div>}
       </div>
 
-      <div className="pm-od-col">
+      {disposed.length > 0 && (
+        <>
+          <p className="pm-dsection">Why Pieces Were Disposed</p>
+          <DisposedStrip records={disposed} comps={comps} className="is-panel" />
+        </>
+      )}
+
       <p className="pm-dsection">Products</p>
+      <small className="pm-od-hint">Click a piece to open its journey.</small>
       <div className="pm-products">
-        {(o.items || []).map((it, i) => (
-          <div key={`${it.product_name}-${i}`} className="pm-product">
-            <Thumb src={it.image_url} alt={it.product_name} large />
-            <div className="pm-product-body">
-              <b>{it.product_name || "–"}</b>
-              <small>{[it.top && `${it.top}${it.top_color?.name ? ` (${it.top_color.name})` : ""}`, it.bottom && `${it.bottom}${it.bottom_color?.name ? ` (${it.bottom_color.name})` : ""}`, it.size && `Size ${it.size}`, Number(it.quantity) > 1 && `Qty ${it.quantity}`].filter(Boolean).join(" · ")}</small>
-              {it.dupatta_color && <small>Dupatta: {typeof it.dupatta_color === "object" ? it.dupatta_color.name : it.dupatta_color}</small>}
-              {Array.isArray(it.extras) && it.extras.length > 0 && <small>Extras: {it.extras.map((e) => `${e.name}${e.color?.name ? ` (${e.color.name})` : ""}`).join(", ")}</small>}
-              {it.notes && <small>Note: {it.notes}</small>}
-              <Measurements m={it.measurements} />
+        {photo && <PhotoView photo={photo} onClose={() => setPhoto(null)} />}
+        {(o.items || []).map((it, i) => {
+          const mine = comps.filter((c) => (c.item_index ?? 0) === i);
+          return (
+            <div key={`${it.product_name}-${i}`} className="pm-product">
+              {it.image_url
+                ? <button type="button" className="pm-photo-btn" aria-label="View the photo larger" onClick={() => setPhoto({ src: it.image_url, name: it.product_name })}><Thumb src={it.image_url} alt={it.product_name} large /></button>
+                : <Thumb src={it.image_url} alt={it.product_name} large />}
+              <div className="pm-product-body">
+                <b>{it.product_name || "–"}</b>
+                <small>{[it.size && `Size ${it.size}`, `Qty ${Number(it.quantity) || 1}`].filter(Boolean).join(" · ")}</small>
+                {it.notes && <small>Note: {it.notes}</small>}
+                {mine.length
+                  ? <div className="pmc-plist">{mine.map((c) => <PieceRow key={c.id} c={c} item={it} hexOf={hexOf} onOpen={() => ctx.openJourney(o, c.id)} />)}</div>
+                  : <small className="pm-muted">No pieces yet</small>}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+      </div>
       </div>
       </div>
       </div>

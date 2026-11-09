@@ -6,6 +6,7 @@ import { Chips, Columns, Drawer, Empty, FilterGroup, Insight, PageHead, Pager, R
 import { CsvButton, FilterDrawer, ListTools, Stat, defineKit } from "../CeoDashboard/dashKit";
 import { csvFromObjects, Loading } from "./PmCommon";
 import { FloorBars } from "./PmToday";
+import { StockPools } from "./PmStockPools";
 import { isDormant, isRunning, pieceState, plural } from "./pmModel";
 
 // ============================================================
@@ -205,18 +206,24 @@ export default function StockPage({ ctx }) {
               {" "}<button type="button" className="ceo-link" onClick={() => openPieces({ title: "Stock Pieces Not Started", sub: "Pieces of running stock orders waiting for Cloth Issue", pieces: making.pieces.filter((c) => pieceState(c) === "not_started") })}>See the ones not started</button>
             </p>
           )}
-        </Card>
-        <Card span={5} md={12} title="Stock Being Made by Channel">
-          <RankBars rows={making.byChannel} format={(v) => plural(v, "order")} sub={(r) => plural(r.pieces, "piece")}
-            onRow={(r) => openOrders({ title: `${r.name} Orders in Production`, sub: "Stock orders still being made", orders: r.list })} />
+          {making.byChannel.length > 0 && (
+            <div className="pm-stock-channels">
+              <span className="pm-dsection">By channel</span>
+              {making.byChannel.map((r) => (
+                <button key={r.name} type="button" className="pm-stock-chan" onClick={() => openOrders({ title: `${r.name} Orders in Production`, sub: "Stock orders still being made", orders: r.list })}>
+                  <b>{r.name}</b><span>{plural(r.value, "order")} · {plural(r.pieces, "piece")}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </Card>
 
-        <Card span={6} md={12} title="Designs Being Made for Stock" sub="Garments ordered on running stock orders, by design. Click one to see its orders.">
-          <RankBars rows={making.designs} limit={10} format={(v) => plural(v, "garment")}
+        <Card span={5} md={12} title="Designs Being Made for Stock" sub="Garments ordered on running stock orders, by design. Click one to see its orders.">
+          <RankBars rows={making.designs} limit={6} format={(v) => plural(v, "garment")}
             sub={(r) => `${plural(r.list.length, "order")}${r.productId && view.rowsById[r.productId] ? ` · ${TYPE_LABELS[view.rowsById[r.productId].type]}` : ""}`}
             onRow={(r) => openOrders({ title: `Making for Stock: ${r.name}`, sub: "Stock orders still in production", orders: r.list })} />
         </Card>
-        <Card span={6} md={12} title="Stock by Size" sub="LXRTS pieces held in each size, across every design">
+        <Card span={12} title="Stock by Size" sub="LXRTS pieces held in each size, across every design">
           <Columns data={data.bySize} money={false} name="Pieces" height={260} />
         </Card>
 
@@ -246,6 +253,8 @@ export default function StockPage({ ctx }) {
             ]} />
           )}
         </Card>
+
+        <StockPools ctx={ctx} />
       </div>
 
       <FilterDrawer open={drawer} onClose={() => setDrawer(false)} onClear={() => { setLevel(""); setType(""); setSortBy("most"); setMakingF(""); }} count={list.length} noun="designs" sub="Narrow the designs in stock">

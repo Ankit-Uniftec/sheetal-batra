@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, 
 import { fmtDate as formatDate } from "./pmModel";
 import { Chips, Columns, Drawer, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, Pager, RankBars, barAxis, barMinWidth, fitBarLabel, labelRoom, num, textOn } from "../CeoDashboard/CeoUi";
 import { ScanReport } from "./PmApprovals";
-import { CsvButton, FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
+import { CsvButton, FilterDrawer, Stat, defineKit } from "../CeoDashboard/dashKit";
 import { csvFromObjects, Dots, Loading } from "./PmCommon";
 import { pct, plural } from "./pmModel";
 import { coverKey, periodSteps, stepOf } from "./pmPeriod";
@@ -230,20 +230,30 @@ export default function PeoplePage({ ctx }) {
           </Card>
 
           <Card span={6} md={12} title="QC Inspectors" sub={`Checks and failures, ${periodName.toLowerCase()}`}>
-            {!inspectors ? <Loading text="Loading the QC checks" /> : (
+            {!inspectors ? <Loading text="Loading the QC checks" /> : (<>
+              {inspectors.length > 0 && (() => {
+                const checks = inspectors.reduce((t, r) => t + (r.value || 0), 0);
+                const fails = inspectors.reduce((t, r) => t + (r.fails || 0), 0);
+                return (
+                  <div className="ceo-dstats pm-qc-sum">
+                    <Stat label="Checks" info="QC checks recorded by inspectors in the period."><b>{num(checks)}</b></Stat>
+                    <Stat label="Failed" info="Checks where the piece failed QC."><b>{num(fails)}</b></Stat>
+                    <Stat label="Fail Rate" info="Failed checks out of all checks."><b>{pct(fails, checks)}%</b></Stat>
+                    <Stat label="Inspectors" info="People who recorded QC checks in the period."><b>{num(inspectors.length)}</b></Stat>
+                  </div>
+                );
+              })()}
               <RankBars rows={inspectors} limit={10} format={(v) => plural(v, "check")}
                 sub={(r) => `${num(r.fails)} failed · ${pct(r.fails, r.value)}% fail rate`}
                 onRow={(r) => openPieces({ title: `Checked by ${r.name}`, sub: periodName, pieces: piecesOf(r.pieces) })} />
-            )}
+            </>)}
           </Card>
           <Card span={6} md={12} title="Manual Moves" sub={`Moves made by override instead of a station scan, ${periodName.toLowerCase()}`}>
-            <Table rowKey={(r) => r.name} rows={data.manualPeople} empty="No manual moves in this period."
-              onRow={(r) => openPieces({ title: `Manual Moves by ${r.name}`, sub: periodName, pieces: piecesOf(r.manualPieces) })}
-              columns={[
-                { key: "name", label: "Person", render: (r) => r.name },
-                { key: "m", label: "Manual Moves", right: true, render: (r) => num(r.manual) },
-                { key: "share", label: "Of Their Scans", right: true, render: (r) => `${pct(r.manual, r.value)}%` },
-              ]} />
+            {data.manualPeople.length ? (
+              <RankBars rows={data.manualPeople.map((r) => ({ ...r, mv: r.manual }))} valueKey="mv" limit={8} format={(v) => plural(v, "manual move")}
+                sub={(r) => `${pct(r.manual, r.value)}% of their scans`}
+                onRow={(r) => openPieces({ title: `Manual Moves by ${r.name}`, sub: periodName, pieces: piecesOf(r.manualPieces) })} />
+            ) : <Empty text="No manual moves in this period." />}
           </Card>
 
           <Card span={12} title="Everyone" sub={`${plural(data.people.length, "person", "people")}, ${periodName.toLowerCase()}. Sorted by ${SORTS.find((s) => s.value === sort).label.toLowerCase()}.`}>

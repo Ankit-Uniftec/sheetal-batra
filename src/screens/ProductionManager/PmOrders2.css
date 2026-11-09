@@ -1,0 +1,15 @@
+/* ============================================================
+   Orders page additions: the "why disposed" strip on order cards and in the
+   order panel, and the Half Made button in a card's footer.
+   Colours need !important: the .ceo namespace forces color: inherit.
+   ============================================================ */
+.ceo.pm .pmd-strip { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-radius: 10px; background: #fbf6e8; border: 1px solid #efe3bf; }
+.ceo.pm .pmd-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; font-size: 12.5px; line-height: 1.45; color: var(--ceo-ink-2) !important; }
+.ceo.pm .pmd-line b { font-weight: 600; color: var(--ceo-ink) !important; }
+.ceo.pm .pmd-line .pm-code { font-size: 11px; color: #8c8476 !important; }
+.ceo.pm .pmd-reason::before, .ceo.pm .pmd-back::before { content: "·"; margin-right: 8px; color: #b9ae92 !important; }
+.ceo.pm .pmd-reason { color: var(--ceo-ink-2) !important; }
+.ceo.pm .pmd-back { color: var(--ceo-gold-deep) !important; font-weight: 500; }
+.ceo.pm .pmd-strip.is-panel { margin-bottom: 4px; }
+.ceo.pm .pmd-halfmade { display: inline-flex; }
+.ceo.pm .pmd-halfmade .pm-halfmade-btn { height: 34px; width: auto; }
