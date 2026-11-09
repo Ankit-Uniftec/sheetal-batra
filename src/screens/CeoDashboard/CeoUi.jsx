@@ -27,6 +27,72 @@ export const CalendarIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></svg>
 );
 
+/**
+ * A defined term. The label itself carries a fine dotted underline, the way a
+ * printed glossary marks a word; pointing at it (or tapping it on a phone)
+ * opens a small card with the definition. No extra icon competes with the
+ * figure. It lives inside clickable tiles and rows, so it is a span (not a
+ * nested button) and keeps its clicks to itself.
+ */
+export function InfoTip({ text, term, children }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const anchor = useRef(null);
+  const show = () => {
+    const r = anchor.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = Math.min(290, window.innerWidth - 24);
+    const centre = r.left + Math.min(r.width, 160) / 2;
+    const left = Math.max(12, Math.min(centre - width / 2, window.innerWidth - width - 12));
+    const below = window.innerHeight - r.bottom > 150;
+    const arrow = Math.max(14, Math.min(width - 14, centre - left));
+    setPos({ left, width, "--ceo-arrow": `${arrow}px`, ...(below ? { top: r.bottom + 9 } : { bottom: window.innerHeight - r.top + 9 }), below });
+    setOpen(true);
+  };
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => { if (!anchor.current?.contains(e.target)) setOpen(false); };
+    const hide = () => setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
+    };
+  }, [open]);
+  if (!text) return children || null;
+  const stop = (e) => { e.stopPropagation(); e.preventDefault(); };
+  const { below, ...style } = pos || {};
+  return (
+    <span
+      ref={anchor}
+      className={`ceo-term${open ? " is-open" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`${typeof children === "string" ? children : term || "Definition"}: ${text}`}
+      onClick={(e) => { stop(e); show(); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { stop(e); show(); } if (e.key === "Escape") setOpen(false); }}
+      onMouseEnter={show}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={show}
+      onBlur={() => setOpen(false)}
+    >
+      {children}
+      {open && pos && createPortal(
+        <div className={`ceo-info-pop${below ? "" : " is-above"}`} role="tooltip" style={style}>
+          {(term || typeof children === "string") && <b className="ceo-info-term">{term || children}</b>}
+          <span className="ceo-info-text">{text}</span>
+        </div>,
+        document.body,
+      )}
+    </span>
+  );
+}
+
 /** A change, coloured by whether it is good news. Nothing when there is no fair comparison. */
 export function Delta({ value, inverse = false, suffix = "%" }) {
   // Against almost nothing, "+90,000%" says nothing. Leave it out.
@@ -47,13 +113,13 @@ export function Delta({ value, inverse = false, suffix = "%" }) {
  * `span` is the card's share of 12 columns on a wide screen; `md` its share on a
  * laptop or tablet. Each row is planned to add up to 12, so no row leaves a hole.
  */
-export function Card({ title, sub, action, onAction, children, className = "", span, md }) {
+export function Card({ title, sub, action, onAction, children, className = "", span, md, info }) {
   return (
     <section className={`ceo-card ${className}`} style={span ? { "--span": span, "--md": md || 12 } : undefined}>
       {(title || action) && (
         <header className="ceo-card-head">
           <div className="ceo-card-titles">
-            {title && <h3>{title}</h3>}
+            {title && <h3>{info ? <InfoTip text={info}>{title}</InfoTip> : title}</h3>}
             {sub && <p>{sub}</p>}
           </div>
           {action && (
@@ -69,12 +135,12 @@ export function Card({ title, sub, action, onAction, children, className = "", s
 }
 
 /** A headline figure. It opens something whenever onClick is given. */
-export function Tile({ label, value, title, delta, inverse, note, icon, onClick, tone }) {
+export function Tile({ label, value, title, delta, inverse, note, icon, onClick, tone, info }) {
   const body = (
     <>
       {icon && <span className={`ceo-tile-ico${tone ? ` is-${tone}` : ""}`}><Icon name={icon} /></span>}
       <span className="ceo-tile-body">
-        <span className="ceo-tile-label">{label}</span>
+        <span className="ceo-tile-label">{info ? <InfoTip text={info}>{label}</InfoTip> : label}</span>
         <span className="ceo-tile-value" title={title}>{value}</span>
         <span className="ceo-tile-foot">
           <Delta value={delta} inverse={inverse} />
@@ -311,7 +377,7 @@ export function Table({ columns, rows, rowKey = (r) => r.id, onRow, empty }) {
     <div className="ceo-table-wrap">
       <table className="ceo-table">
         <thead>
-          <tr>{columns.map((c) => <th key={c.key} className={cls(c)}>{c.label}</th>)}</tr>
+          <tr>{columns.map((c) => <th key={c.key} className={cls(c)}>{c.info ? <InfoTip text={c.info}>{c.label}</InfoTip> : c.label}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (

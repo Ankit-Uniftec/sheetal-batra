@@ -1,0 +1,17 @@
+.logo-loader { position: relative; display: block; width: min(280px, 62vw); }
+.logo-loader .logo-loader-still,
+.logo-loader .logo-loader-video { width: 100%; height: auto; display: block; mix-blend-mode: multiply; }
+
+/* The video waits out of sight until it is actually playing. */
+.logo-loader .logo-loader-video { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.logo-loader.is-playing .logo-loader-video { position: static; opacity: 1; }
+.logo-loader.is-playing .logo-loader-still { display: none; }
+.logo-loader:not(.is-playing) .logo-loader-still { animation: logoLoaderPulse 1.8s ease-in-out infinite; }
+
+/* Belt and braces: never draw the browser's own play button. */
+.logo-loader video::-webkit-media-controls,
+.logo-loader video::-webkit-media-controls-start-playback-button,
+.logo-loader video::-webkit-media-controls-overlay-play-button { display: none !important; -webkit-appearance: none; }
+
+@keyframes logoLoaderPulse { 0%, 100% { opacity: .55; transform: scale(.98); } 50% { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .logo-loader:not(.is-playing) .logo-loader-still { animation: none; } }

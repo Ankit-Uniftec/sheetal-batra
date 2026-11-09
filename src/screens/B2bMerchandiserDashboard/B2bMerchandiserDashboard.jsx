@@ -13,6 +13,8 @@ import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationSe
 import ComponentStageBadge from "../../components/ComponentStageBadge";
 import ComponentJourneyModal from "../../components/ComponentJourneyModal";
 import QcReportModal from "../../components/QcReportModal";
+import UpdatePaymentModal from "../../components/UpdatePaymentModal";
+import { canUpdateB2bPayment, b2bPaymentState, recordPayment, paymentRecordedPopup } from "../../utils/recordPayment";
 import PostDispatchModal from "../../components/PostDispatchModal";
 import PostDispatchAnalytics from "../../components/PostDispatchAnalytics";
 import { canPostDispatch, revokeBlock, fetchPostDispatchActions, groupActionsByOrder } from "../../utils/postDispatch";
@@ -77,6 +79,8 @@ export default function B2bMerchandiserDashboard() {
     // environment rather than hardcoded (see utils/appEnvironment.js).
     const [journeyOrder, setJourneyOrder] = useState(null); // { order_no, components }
     const [qcReportOrder, setQcReportOrder] = useState(null); // { id, order_no }
+    const [paymentOrder, setPaymentOrder] = useState(null); // B2B order whose payment is being recorded
+    const [paymentSaving, setPaymentSaving] = useState(false);
     const [vendors, setVendors] = useState([]);
     const [vendorMap, setVendorMap] = useState({});
     const [sizeCharts, setSizeCharts] = useState([]);
@@ -874,6 +878,24 @@ export default function B2bMerchandiserDashboard() {
         navigate("/b2b-product-form", { state: { isB2bStockOrder: true } });
     };
     const handleViewOrder = (orderId) => navigate(`/b2b-order-view/${orderId}`);
+
+    // Money received from a partner against a B2B order. Same ledger write as
+    // retail Update Payment; the trigger keeps total_paid and the balance.
+    const handleRecordB2bPayment = async (payment) => {
+        if (!paymentOrder) return;
+        setPaymentSaving(true);
+        try {
+            const result = await recordPayment(paymentOrder, payment, user?.email || null);
+            if (result.fresh) setOrders((prev) => prev.map((o) => (o.id === result.fresh.id ? { ...o, ...result.fresh } : o)));
+            setPaymentOrder(null);
+            showPopup({ ...paymentRecordedPopup(result), confirmText: "Ok" });
+        } catch (err) {
+            console.error("B2B payment failed:", err);
+            showPopup({ title: "Payment Not Recorded", message: err?.message || "The payment could not be saved. Nothing was recorded.", type: "error", confirmText: "Ok" });
+        } finally {
+            setPaymentSaving(false);
+        }
+    };
     const handleViewVendorOrders = (vendorId) => {
         const vendor = vendorMap[vendorId] || vendors.find(v => v.id === vendorId);
         setOrderSearch(vendor?.store_brand_name || "");
@@ -1262,6 +1284,7 @@ export default function B2bMerchandiserDashboard() {
                                                 {!order.is_stock_order && (<div className="merch-ocard-row"><span className="merch-ocard-dlabel">Vendor:</span><span className="merch-ocard-dval">{vendorMap[order.vendor_id]?.store_brand_name || "\u2014"}</span></div>)}
                                                 {!order.is_stock_order && (<div className="merch-ocard-row"><span className="merch-ocard-dlabel">Merchandiser:</span><span className="merch-ocard-dval">{order.merchandiser_name || "\u2014"}</span></div>)}
                                                 <div className="merch-ocard-grid">
+                                                    {!order.is_stock_order && !order.is_gifting && (() => { const pay = b2bPaymentState(order); return (<><div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Received:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(Math.round(pay.received))}`}</span></div><div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Balance:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(Math.round(pay.balance))}`}</span></div></>); })()}
                                                     {!order.is_stock_order && (<div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Amount:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}`}</span></div>)}
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Qty:</span><span className="merch-ocard-dval">{order.total_quantity || 1}</span></div>
                                                     <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Top:</span><span className="merch-ocard-dval"><GarmentValue name={item.top} color={item.top_color} /></span></div>
@@ -1289,7 +1312,7 @@ export default function B2bMerchandiserDashboard() {
                                                 ))}
                                             </div>
                                         )}
-                                        {(order.approval_status === "pending" || (canViewProduction && order.approval_status === "approved") || canCancelFromCard(order) || canRevokeFromCard(order) || canPostDispatch(order)) && (
+                                        {(order.approval_status === "pending" || (canViewProduction && order.approval_status === "approved") || canCancelFromCard(order) || canRevokeFromCard(order) || canPostDispatch(order) || canUpdateB2bPayment(order)) && (
                                             <div className="merch-ocard-actions" onClick={(e) => e.stopPropagation()}>
                                                 {order.approval_status === "pending" ? (
                                                     <>
@@ -1316,6 +1339,9 @@ export default function B2bMerchandiserDashboard() {
                                                 )}
                                                 {canRevokeFromCard(order) && (
                                                     <button className="merch-btn-cancel" onClick={() => openRevokeForOrder(order)}>Revoke</button>
+                                                )}
+                                                {canUpdateB2bPayment(order) && (
+                                                    <button className="merch-btn-journey" onClick={() => setPaymentOrder(order)}>Update Payment</button>
                                                 )}
                                                 {canPostDispatch(order) && (
                                                     <button className="merch-btn-qc" onClick={() => setPostDispatchOrder(order)}>
@@ -1785,6 +1811,14 @@ export default function B2bMerchandiserDashboard() {
                     orderNo={journeyOrder.order_no}
                     components={journeyOrder.components}
                     onClose={() => setJourneyOrder(null)}
+                />
+            )}
+            {paymentOrder && (
+                <UpdatePaymentModal
+                    order={paymentOrder}
+                    saving={paymentSaving}
+                    onCancel={() => { if (!paymentSaving) setPaymentOrder(null); }}
+                    onConfirm={handleRecordB2bPayment}
                 />
             )}
             {qcReportOrder && (

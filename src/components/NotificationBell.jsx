@@ -57,7 +57,7 @@ const TYPE_ICONS = {
  * @param {string} userEmail - Current user's email (for filtering)
  * @param {function} onOrderClick - Optional callback when user clicks an order notification
  */
-const NotificationBell = ({ userEmail, onOrderClick }) => {
+const NotificationBell = ({ userEmail, onOrderClick, look }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -197,10 +197,19 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
         <>
             {/* Bell Button */}
             <button
-                className="notif-bell-btn"
+                className={`notif-bell-btn${look === "soft" ? " is-soft" : ""}`}
                 onClick={() => setIsOpen(!isOpen)}
                 title="Notifications"
+                aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
             >
+                {look === "soft" ? (
+                    // The leadership dashboards' bell: a finer line drawing and a quiet
+                    // gold count, matching their other header buttons.
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 3.2a5.4 5.4 0 0 0-5.4 5.4v2.9c0 1.1-.4 2.2-1.1 3.1l-.9 1.1c-.5.6-.1 1.5.7 1.5h13.4c.8 0 1.2-.9.7-1.5l-.9-1.1a5 5 0 0 1-1.1-3.1V8.6A5.4 5.4 0 0 0 12 3.2Z" />
+                        <path d="M10 19.6a2.1 2.1 0 0 0 4 0" />
+                    </svg>
+                ) : (
                 <svg
                     width="22"
                     height="22"
@@ -214,6 +223,7 @@ const NotificationBell = ({ userEmail, onOrderClick }) => {
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                     <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
+                )}
                 {unreadCount > 0 && (
                     <span className="notif-bell-badge">
                         {unreadCount > 99 ? "99+" : unreadCount}

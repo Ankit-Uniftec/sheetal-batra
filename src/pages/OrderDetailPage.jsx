@@ -446,10 +446,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  const handleLogout = () => {
-    navigate("/AssociateDashboard", { replace: true });
-  };
-
   if (loading) {
     return (
       <div className="odp-loading">
@@ -504,7 +500,9 @@ export default function OrderDetailPage() {
 
       {/* Header */}
       <header className="odp-header">
-        <img src={Logo} alt="logo" className="odp-logo" onClick={handleLogout} />
+        {/* Same as Back: the old jump to /AssociateDashboard signed out anyone who
+            is not a sales associate (GM, CEO, store manager) opening an order. */}
+        <img src={Logo} alt="logo" className="odp-logo" onClick={handleBack} />
         <h1 className="odp-page-title">Order Details</h1>
         <button className="odp-back-btn" onClick={handleBack}>
           ← Back

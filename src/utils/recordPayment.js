@@ -27,6 +27,32 @@ export function canUpdatePayment(order) {
 }
 
 /**
+ * B2B orders that still owe money. Partners pay against an invoice, often
+ * after delivery, so unlike retail a delivered order stays eligible. Not
+ * offered on internal stock moves, gifting (nothing is owed), or orders that
+ * were cancelled, revoked or never approved. The write is the same
+ * order_payments insert as retail (recordPayment), so total_paid and the
+ * balance are kept by the same database trigger.
+ */
+export const B2B_CLOSED_STATUSES = ["cancelled", "revoked", "exchange_return"];
+export function canUpdateB2bPayment(order) {
+    if (!order || !order.is_b2b || order.is_stock_order || order.is_gifting) return false;
+    if (B2B_CLOSED_STATUSES.includes((order.status || "").toLowerCase())) return false;
+    if ((order.approval_status || "").toLowerCase() !== "approved") return false;
+    if ((order.b2b_order_type || "").toLowerCase() === "partner gifting") return false;
+    const orderTotal = Number(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0);
+    const paidSoFar = Number(order.total_paid ?? order.advance_payment) || 0;
+    return orderTotal - paidSoFar > 0;
+}
+
+/** What a B2B order has received and still owes, from the same columns the modal reads. */
+export function b2bPaymentState(order) {
+    const total = Number(order?.net_total ?? order?.grand_total_after_discount ?? order?.grand_total ?? 0);
+    const received = Number(order?.total_paid ?? order?.advance_payment) || 0;
+    return { total, received, balance: Math.max(0, total - received) };
+}
+
+/**
  * Insert the collected rows into order_payments and return the re-read order.
  *
  * No orders.update at all. Adding into advance_payment used to make the
