@@ -747,3 +747,22 @@
 @media (max-width: 760px) {
   .ceo.pm .pmc-note { max-width: 100%; }
 }
+
+/* Order cards: each product line holds its own pieces (no side panel). */
+.ceo.pm .pmc-body { grid-template-columns: minmax(0, 1fr); }
+.ceo.pm .pmc-product { grid-template-columns: 64px minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.25fr); }
+.ceo.pm .pmc-ppieces { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-left: 18px; border-left: 1px solid #f1ebdc; }
+.ceo.pm .pmc-ppieces > .pmc-label { font-size: 10px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; }
+.ceo.pm .pmc-ppieces .pmo-chip { width: 100%; min-width: 0; grid-template-columns: minmax(70px, max-content) minmax(0, 1fr); }
+.ceo.pm .pmc-ppieces .pmo-chip b { white-space: normal; overflow: visible; }
+.ceo.pm .pmc-ppieces .pmo-chip span { white-space: normal; }
+.ceo.pm .pmc-progress { display: inline-flex; align-items: center; gap: 8px; }
+.ceo.pm .pmc-progress .pm-mini-bar { width: 90px; }
+@media (max-width: 1100px) {
+  .ceo.pm .pmc-product { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); }
+  .ceo.pm .pmc-ppieces { grid-column: 2 / -1; padding-left: 0; border-left: 0; padding-top: 10px; border-top: 1px dashed #f1ebdc; }
+}
+@media (max-width: 760px) {
+  .ceo.pm .pmc-product { grid-template-columns: 52px minmax(0, 1fr); }
+  .ceo.pm .pmc-ppieces { grid-column: 1 / -1; }
+}

@@ -188,6 +188,9 @@ export default function OrderRows({ ctx, rows }) {
         const dueTone = late ? "late" : running && hasPromise(o) && left != null && left <= 2 ? "soon" : null;
         const open = () => ctx.openOrder(o);
         const client = clientOf(o, ctx.vendorMap);
+        // Each product's pieces (pieces of products past the third go with the last one shown).
+        const lastShown = shownItems.length - 1;
+        const piecesOf = (i) => comps.filter((c) => Math.min(c.item_index ?? 0, lastShown) === i);
         return (
           <article key={o.id} className={`pmc-card${late ? " is-late" : ""}`} onClick={open} role="button" tabIndex={0}
             onKeyDown={(e) => { if (e.key === "Enter") open(); }} aria-label={`Order ${o.order_no}`}>
@@ -230,27 +233,26 @@ export default function OrderRows({ ctx, rows }) {
                         </Line>
                       )}
                     </div>
+                    <div className="pmc-ppieces">
+                      <span className="pmc-label">Pieces</span>
+                      {piecesOf(i).length
+                        ? <div className="pmc-plist">{piecesOf(i).map((c) => <PieceRow key={c.id} c={c} item={items[c.item_index ?? 0]} />)}</div>
+                        : <span className="pm-muted">No pieces yet</span>}
+                    </div>
                   </div>
                 ))}
                 {items.length > MAX_PRODUCTS && <p className="pmc-more">+{plural(items.length - MAX_PRODUCTS, "more product")} · open the order to see all</p>}
               </div>
 
-              <div className="pmc-pieces">
-                <div className="pmc-pieces-head">
-                  <span className="pmc-hlabel">Pieces</span>
-                  {live.length ? <b>{done} of {live.length} finished</b> : <span className="pm-muted">No pieces yet</span>}
-                </div>
-                {live.length > 0 && <span className="pm-mini-bar pmc-bar"><i style={{ width: `${(done / live.length) * 100}%` }} /></span>}
-                <div className="pmc-plist">
-                  {comps.slice(0, 6).map((c) => <PieceRow key={c.id} c={c} item={items[c.item_index ?? 0]} />)}
-                  {comps.length > 6 && <small className="pm-muted">+{comps.length - 6} more pieces</small>}
-                </div>
-              </div>
             </div>
 
             <footer className="pmc-foot">
               <span className="pmc-foot-note">
-                {o.mode_of_delivery ? <>Delivery: <b>{o.mode_of_delivery}</b></> : null}
+                <span className="pmc-progress">
+                  Pieces: <b>{live.length ? `${done} of ${live.length} finished` : "none yet"}</b>
+                  {live.length > 0 && <span className="pm-mini-bar"><i style={{ width: `${(done / live.length) * 100}%` }} /></span>}
+                </span>
+                {o.mode_of_delivery ? <span>Delivery: <b>{o.mode_of_delivery}</b></span> : null}
                 {items.length > 1 ? <span>{plural(items.length, "product")}</span> : null}
                 {o.notes ? <span className="pmc-note" title={o.notes}>Note: <b>{o.notes}</b></span> : null}
               </span>
