@@ -1,6 +1,21 @@
 import React from "react";
 import Badge from "./Badge";
 import { getComponentStageLabel, getStageColor, getStagesOutsideLabel } from "../utils/barcodeService";
+import "./ComponentStageBadge.css";
+
+// The brand look (look="brand"): one calm set of states instead of a colour
+// per stage. done = finished or shipped, active = being worked on, vendor =
+// out at a vendor, waiting = not started, problem = disposed or scrapped.
+const DONE_STAGES = new Set(["final_qc_passed", "production_complete", "packaging_dispatch", "dispatched", "delivered"]);
+const PROBLEM_STAGES = new Set(["disposed", "scrapped"]);
+export function stageTone(comp) {
+  if (!comp) return "waiting";
+  if (PROBLEM_STAGES.has(comp.current_stage)) return "problem";
+  if (comp.is_outside_wh) return "vendor";
+  if (DONE_STAGES.has(comp.current_stage)) return "done";
+  if (!comp.current_stage || comp.current_stage === "order_received") return "waiting";
+  return "active";
+}
 
 // The ONE badge used everywhere to show a component's production status.
 // When the piece is out at an external vendor (is_outside_wh), it reads
@@ -36,8 +51,14 @@ function passSuffix(comp, stage) {
   return n > 0 ? ` (${n + 1})` : "";
 }
 
-export default function ComponentStageBadge({ comp, className }) {
+export default function ComponentStageBadge({ comp, className, look }) {
   if (!comp) return null;
+
+  if (look === "brand") {
+    const stage = comp.is_outside_wh ? getStagesOutsideLabel(comp.stages_outside) : null;
+    const text = comp.is_outside_wh ? (stage ? `Out to Vendor (${stage})` : "Out to Vendor") : getComponentStageLabel(comp);
+    return <span className={`sb-stage-pill is-${stageTone(comp)}${className ? ` ${className}` : ""}`}>{text}{passSuffix(comp, comp.current_stage)}</span>;
+  }
 
   // Both branches count against the piece's CURRENT stage — an out-at-vendor
   // piece is still at that stage, it is just not in the building.

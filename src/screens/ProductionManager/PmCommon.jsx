@@ -336,7 +336,7 @@ export function PiecesTable({ ctx, pieces: all, title, stats = true, empty = "No
           { key: "bc", label: "Barcode", render: (c) => <span className="pm-code">{c.barcode || "–"}</span> },
           { key: "order", label: "Order", render: (c) => c.order_no || ctx.ordersById[c.order_id]?.order_no || "–" },
           { key: "client", label: "Client", render: (c) => muted(clientOf(ctx.ordersById[c.order_id] || {}, ctx.vendorMap)) },
-          { key: "stage", label: "Stage", flow: "one", render: (c) => <span className="ceo-keep"><ComponentStageBadge comp={c} /></span> },
+          { key: "stage", label: "Stage", flow: "one", render: (c) => <span className="ceo-keep"><ComponentStageBadge comp={c} look="brand" /></span> },
           { key: "where", label: "Where", render: (c) => WHERE[pieceState(c)] && pieceState(c) === "at_vendor" ? `At ${c.vendor_name || "a vendor"}` : (WHERE[pieceState(c)] || "–") },
           { key: "age", label: "At Stage", right: true, render: (c) => { const at = daysAtStage(c); return at == null ? "–" : plural(at, "day"); } },
           { key: "over", label: "Over Limit", right: true, render: (c) => { const od = overBy(c); return od > 0 ? <span className="pm-late">{plural(od, "day")}</span> : <span className="pm-muted">–</span>; } },

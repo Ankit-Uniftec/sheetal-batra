@@ -68,7 +68,7 @@
 .ceo.pm .pm-compare-bar.is-today i { background: #a9821f; }
 .ceo.pm .pm-compare-bar b { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ceo.pm .pm-compare-flag { font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
-.ceo.pm .pm-compare-flag.is-good { background: #eef4ea; color: #4c7a3a !important; }
+.ceo.pm .pm-compare-flag.is-good { background: #ecebe6; color: #34312a !important; }
 .ceo.pm .pm-compare-flag.is-bad { background: #f7ebe4; color: #a5553a !important; }
 .ceo.pm .pm-compare-flag.is-quiet { background: #f4f0e6; color: var(--ceo-ink-3) !important; }
 .ceo.pm .pm-compare-key { display: flex; gap: 14px; font-size: 12px; color: var(--ceo-ink-3) !important; }
@@ -271,7 +271,7 @@
 .ceo.pm .pmb-act.is-crit .pmb-ico { background: #f7ebe4; color: #a5553a !important; }
 .ceo.pm .pmb-act.is-warn .pmb-ico { background: #f6eedb; color: #8a6510 !important; }
 .ceo.pm .pmb-act.is-gold .pmb-ico { background: var(--ceo-gold-soft); color: var(--ceo-gold-deep) !important; }
-.ceo.pm .pmb-act.is-ok .pmb-ico { background: #eef4ea; color: #4c7a3a !important; }
+.ceo.pm .pmb-act.is-ok .pmb-ico { background: #ecebe6; color: #34312a !important; }
 .ceo.pm .pmb-act.is-ok { background: #fcfdfb; }
 .ceo.pm .pmb-act-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
 .ceo.pm .pmb-act-tag { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--ceo-ink-3) !important; }
@@ -313,7 +313,7 @@
 .ceo.pm .pm-dsection-note { font-weight: 400; letter-spacing: 0; text-transform: none; margin-left: 6px; }
 .ceo.pm .pm-qc-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .ceo.pm .pm-qc-row { display: grid; grid-template-columns: 76px 1fr; gap: 10px; align-items: start; padding: 8px 10px; background: #fff; border: 1px solid var(--ceo-line); border-radius: 10px; }
-.ceo.pm .pm-qc-result { font-size: 11px; font-weight: 600; text-align: center; padding: 3px 0; border-radius: 6px; background: #eef4ea; color: #4c7a3a !important; }
+.ceo.pm .pm-qc-result { font-size: 11px; font-weight: 600; text-align: center; padding: 3px 0; border-radius: 6px; background: #ecebe6; color: #34312a !important; }
 .ceo.pm .pm-qc-row.is-fail .pm-qc-result { background: #f7ebe4; color: #a5553a !important; }
 .ceo.pm .pm-qc-row.is-override .pm-qc-result { background: #f6eedb; color: #8a6510 !important; }
 .ceo.pm .pm-qc-main { display: flex; flex-direction: column; min-width: 0; }
@@ -389,7 +389,7 @@
 .ceo.pm .pmo-status { min-width: 140px; }
 .ceo.pm .pmo-pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 99px; background: var(--ceo-gold-soft); color: var(--ceo-gold-deep) !important; white-space: nowrap; }
 .ceo.pm .pmo-pill.is-in-production { background: #f6eedb; color: #8a6510 !important; }
-.ceo.pm .pmo-pill.is-completed, .ceo.pm .pmo-pill.is-dispatched, .ceo.pm .pmo-pill.is-delivered { background: #eef4ea; color: #4c7a3a !important; }
+.ceo.pm .pmo-pill.is-completed, .ceo.pm .pmo-pill.is-dispatched, .ceo.pm .pmo-pill.is-delivered { background: #ecebe6; color: #34312a !important; }
 .ceo.pm .pmo-pill.is-cancelled { background: #f7ebe4; color: #a5553a !important; }
 .ceo.pm .pmo-done { min-width: 110px; }
 .ceo.pm .pmo-done-cell { display: flex; flex-direction: column; gap: 6px; }
@@ -400,7 +400,7 @@
 .ceo.pm .pmo-chip { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: center; width: fit-content; min-width: 200px; font-size: 12px; padding: 4px 10px; border-radius: 8px; background: #faf6ec; }
 .ceo.pm .pmo-chip b { font-weight: 600; color: var(--ceo-ink) !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ceo.pm .pmo-chip span { color: var(--ceo-ink-2) !important; }
-.ceo.pm .pmo-chip.is-finished { background: #eef4ea; }
+.ceo.pm .pmo-chip.is-finished { background: #ecebe6; }
 .ceo.pm .pmo-chip.is-at_vendor, .ceo.pm .pmo-chip.is-at_wh2 { background: #f6eedb; }
 .ceo.pm .pmo-chip.is-disposed, .ceo.pm .pmo-chip.is-removed { background: #f7ebe4; }
 .ceo.pm .pmo-chip.is-not_started { background: #f4f0e6; }
@@ -665,3 +665,18 @@
 @media (max-width: 640px) {
   .ceo.pm .ceo-table-wrap .ceo-table:not(.pmo-table) td, .ceo.pm .ceo-table-wrap .ceo-table:not(.pmo-table) th { padding-left: 11px; padding-right: 11px; }
 }
+
+/* State colours, one calm set across the dashboard (no greens):
+   done #34312a on #ecebe6 · in progress #7a5c14 on #f6efdf · vendor #85582d on #f4ebe2
+   waiting #6f6a61 on #f2f1ed · problem #a5553a on #f8ece7 */
+.ceo.pm .pmo-pill { background: #f2f1ed; color: #5a5448 !important; }
+.ceo.pm .pmo-pill.is-in-production { background: #f6efdf; color: #7a5c14 !important; }
+.ceo.pm .pmo-pill.is-completed, .ceo.pm .pmo-pill.is-dispatched, .ceo.pm .pmo-pill.is-delivered { background: #ecebe6; color: #34312a !important; }
+.ceo.pm .pmo-pill.is-cancelled { background: #f8ece7; color: #a5553a !important; }
+.ceo.pm .pmo-chip.is-at_vendor { background: #f4ebe2; }
+.ceo.pm .pmo-chip.is-at_wh2 { background: #f6efdf; }
+.ceo.pm .pmo-chip.is-not_started { background: #f2f1ed; }
+.ceo.pm .pmo-chip.is-disposed, .ceo.pm .pmo-chip.is-removed { background: #f8ece7; }
+.ceo.pm .ceo-keep .sb-stage-pill { font-size: 11.5px; }
+/* "Good" changes and states use the dark neutral, not green. */
+.ceo.pm { --ceo-ok: #34312a; --ceo-ok-bg: #ecebe6; }

@@ -712,7 +712,7 @@ export function OverrideTool({ ctx, initialOrder = null }) {
               <button key={comp.id} type="button" className="pmo-piece" aria-pressed={c?.id === comp.id} onClick={() => selectComponent(comp)}>
                 <span className="pmo-piece-top">
                   <b>{comp.component_label || comp.component_type}</b>
-                  <span className="ceo-keep"><ComponentStageBadge comp={comp} /></span>
+                  <span className="ceo-keep"><ComponentStageBadge comp={comp} look="brand" /></span>
                 </span>
                 <span className="pm-code">{comp.barcode}</span>
                 {(!comp.is_active || comp.is_delayed || comp.is_outside_wh || comp.re_journey_count > 0) && (
@@ -735,7 +735,7 @@ export function OverrideTool({ ctx, initialOrder = null }) {
           <Head title={`Selected Piece · ${c.component_label || c.component_type || c.barcode}`} />
           <div className="ceo-dstats">
             <Stat label="Barcode"><b className="pmo-mono">{c.barcode}</b></Stat>
-            <Stat label="Current Stage"><span className="ceo-keep"><ComponentStageBadge comp={c} /></span></Stat>
+            <Stat label="Current Stage"><span className="ceo-keep"><ComponentStageBadge comp={c} look="brand" /></span></Stat>
             <Stat label="QC Status"><b>{c.qc_status || "pending"}</b></Stat>
             <Stat label="Re-journeys"><b>{num(c.re_journey_count || 0)}</b></Stat>
             {/* The WAREHOUSE (T-2) date, not the customer's (utils/productionPrivacy.js). */}

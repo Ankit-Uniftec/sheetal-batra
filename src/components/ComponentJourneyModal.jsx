@@ -328,7 +328,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
         </div>
 
         {loading ? (
-          <div className="cjm-empty"><span className="cjm-spinner" />Loading journey…</div>
+          <div className="cjm-empty"><span className="cjm-spinner" />Loading the journey</div>
         ) : journeyData.length === 0 ? (
           <p className="cjm-empty">No pieces found for this order.</p>
         ) : (
@@ -407,7 +407,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                         </div>
                         {/* Shared badge so the stage text (and the re-journey
                             pass number) matches every dashboard. */}
-                        <ComponentStageBadge comp={badgeComp} />
+                        <ComponentStageBadge comp={badgeComp} look="brand" />
                         {st.vendor && (
                           <span className={`cjm-vendor-now ${st.vendor.overdue ? "cjm-overdue" : ""}`}>{st.vendor.text}</span>
                         )}
@@ -449,7 +449,7 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                               const word = state === "current" ? (st.done ? "Finished" : c.is_outside_wh ? "Now · at vendor" : "Now")
                                 : state === "done" ? "Done" : state === "skipped" ? "Not needed" : isNext ? "Up next" : "To come";
                               return (
-                                <li key={g.key} className={`cjm-stop is-${state}${isNext ? " is-next" : ""}`}>
+                                <li key={g.key} className={`cjm-stop is-${state}${isNext ? " is-next" : ""}${state === "current" && st.done ? " is-finished" : ""}`}>
                                   <span className="cjm-stop-top">
                                     <span className="cjm-stop-num">{state === "done" ? "✓" : i === 0 ? "•" : i}</span>
                                     <span className="cjm-stop-word">{word}</span>
@@ -592,12 +592,12 @@ const ComponentJourneyModal = ({ orderNo, components = [], onClose }) => {
                                           <div className="cjm-scan-head">
                                             <span className="cjm-scan-time">{timeOf(t.scanned_at)}</span>
                                             <span className="cjm-scan-title">{d.headline}</span>
-                                            <ScanKindTag kind={d.kind} />
+                                            <ScanKindTag kind={d.kind} look="brand" />
                                           </div>
                                           <div className="cjm-scan-meta">
                                             <span className="cjm-chip"><PersonIcon />{t.scanned_by || "Unknown"}</span>
                                             {t.station_name && <span className="cjm-chip"><StationIcon />{t.station_name}</span>}
-                                            <FactoryBadge factory={t.factory} />
+                                            <FactoryBadge factory={t.factory} look="brand" />
                                             {typeWord && <span className="cjm-chip is-type">{typeWord}</span>}
                                           </div>
                                           {t.notes && <p className="cjm-scan-note">{t.notes}</p>}

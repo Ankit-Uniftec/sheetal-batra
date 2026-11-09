@@ -4,8 +4,16 @@ import React from "react";
 // (green) or an EXTERNAL / vendor movement (orange). Shared by every timeline
 // so the internal-vs-external segregation looks identical everywhere. Uses
 // inline styles so it drops into any timeline CSS (cjm-, wd-, po-) unchanged.
-export default function ScanKindTag({ kind }) {
+// look="brand": the quiet brand tones (neutral for internal, copper for vendor).
+export default function ScanKindTag({ kind, look }) {
   const external = kind === "external";
+  if (look === "brand") {
+    return (
+      <span style={{ display: "inline-block", fontSize: "10.5px", fontWeight: 600, lineHeight: 1, letterSpacing: "0.03em", padding: "4px 8px", borderRadius: "999px", textTransform: "uppercase", whiteSpace: "nowrap", color: external ? "#85582d" : "#5a5448", backgroundColor: external ? "#f4ebe2" : "#f2f1ed" }}>
+        {external ? "External / Vendor" : "Internal Scan"}
+      </span>
+    );
+  }
   const style = {
     display: "inline-block",
     fontSize: "10px",

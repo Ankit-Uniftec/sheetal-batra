@@ -7,10 +7,18 @@ import { factoryBadge, WH2 } from "../utils/factory2";
  * scanner's login at scan time; older rows were back-filled from the logins'
  * assignment. Renders nothing for an unassigned login (PH, PM).
  */
-export default function FactoryBadge({ factory }) {
+export default function FactoryBadge({ factory, look }) {
   const text = factoryBadge(factory);
   if (!text) return null;
   const two = factory === WH2;
+  // The brand look: a quiet neutral tag (the older dashboards keep blue / purple).
+  if (look === "brand") {
+    return (
+      <span style={{ display: "inline-block", marginLeft: 6, padding: "1px 8px", borderRadius: 10, fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap", background: two ? "#efe9dc" : "#f1f0ec", color: "#5a5448" }}>
+        {text}
+      </span>
+    );
+  }
   return (
     <span
       style={{

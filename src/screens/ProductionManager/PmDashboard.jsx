@@ -799,7 +799,7 @@ function OrderDrawer({ order: o, ctx, onClose, onBack }) {
               <small className="pm-code">{c.barcode}</small>
             </span>
             <span className="pm-piece-side">
-              <span className="ceo-keep"><ComponentStageBadge comp={c} /></span>
+              <span className="ceo-keep"><ComponentStageBadge comp={c} look="brand" /></span>
               {c.is_outside_wh && <small>At {c.vendor_name || "vendor"}{c.stages_outside ? ` · ${getStagesOutsideLabel(c.stages_outside) || ""}` : ""}</small>}
             </span>
           </div>
