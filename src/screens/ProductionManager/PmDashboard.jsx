@@ -224,7 +224,8 @@ export default function PmDashboard() {
       if (snap?.core) {
         apply(snap.core, new Date(snap.savedAt));
         // The saved slower data sets show too; each is fetched again in the background.
-        setLazy(Object.fromEntries(Object.entries(snap.lazy || {}).map(([k, rows]) => [k, { loading: false, rows }])));
+        // Saved sets only fill gaps: anything already loaded fresh is kept.
+        setLazy((s) => ({ ...Object.fromEntries(Object.entries(snap.lazy || {}).map(([k, rows]) => [k, { loading: false, rows }])), ...s }));
         setStale(true);
         setLoading(false);
       }

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { STAGE_GROUPS } from "../../utils/barcodeService";
-import { Chips, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, RankBars, barValueLabel, num, textOn } from "../CeoDashboard/CeoUi";
+import { Chips, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, RankBars, barAxis, barMinWidth, fitBarLabel, labelRoom, num, textOn } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { OrdersTable } from "./PmCommon";
 import {
@@ -217,21 +217,23 @@ function LoadChart({ rows, onPick }) {
   );
   return (
     <>
-      <div style={{ width: "100%", height: 270, cursor: "pointer" }}>
+      <div className="ceo-chart-scroll">
+      <div style={{ width: "100%", minWidth: barMinWidth(rows.length), height: 270, cursor: "pointer" }}>
         <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
-          <BarChart data={rows} margin={{ top: 22, right: 4, left: 0, bottom: 0 }}>
+          <BarChart data={rows} margin={{ top: labelRoom(rows.map((r) => r.total)), right: 4, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#f1ede2" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} minTickGap={4} />
+            <XAxis dataKey="name" axisLine={false} tickLine={false} {...barAxis(rows.length)} />
             <YAxis tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} width={40} allowDecimals={false} />
             <Tooltip cursor={{ fill: "rgba(184,146,46,.07)" }} />
             {used.map((s, i) => (
               <Bar key={s.key} dataKey={s.key} name={s.name} stackId="a" fill={s.color} maxBarSize={38} isAnimationActive={false} onClick={(d) => onPick(d?.payload || d)}>
                 <LabelList dataKey={s.key} content={segLabel(s.color)} />
-                {i === used.length - 1 && <LabelList dataKey="total" content={barValueLabel(num)} />}
+                {i === used.length - 1 && <LabelList dataKey="total" content={fitBarLabel(num, rows.map((r) => r.total))} />}
               </Bar>
             ))}
           </BarChart>
         </ResponsiveContainer>
+      </div>
       </div>
       <div className="pmp-legend">{used.map((s) => <span key={s.key}><i style={{ background: s.color }} />{s.name}</span>)}</div>
     </>

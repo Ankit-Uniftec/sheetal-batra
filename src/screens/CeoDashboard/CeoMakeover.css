@@ -658,3 +658,6 @@
 .ceo .ceo-seg { height: 40px; align-items: stretch; }
 .ceo .ceo-seg button { padding-top: 0; padding-bottom: 0; }
 .ceo .ceo-top .ceo-icon-btn, .ceo .comms-cal-head .ceo-icon-btn { width: 40px; height: 40px; }
+
+/* A long bar chart scrolls sideways inside its card on small screens, so every bar keeps its number. */
+.ceo .ceo-chart-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }

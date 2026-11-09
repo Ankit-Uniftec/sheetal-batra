@@ -509,3 +509,10 @@
 .ceo.pm .pm-inline-foot { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .ceo.pm .pm-period-note { margin: 4px 0 0; font-size: 13px; color: #7a7466 !important; }
 .ceo.pm .pm-period-note b { color: #3b3528 !important; }
+
+/* Chart number fixes: a floor segment is always wide enough for its number;
+   the pass-rate strip under a long chart stays one row and scrolls sideways. */
+.ceo.pm .pm-floor-seg { min-width: max-content; }
+.ceo.pm .pmq-rates { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.ceo.pm .pmq-rates span { flex: 0 0 auto; }
+.ceo.pm .pm-classic .ev-input { max-width: 100%; box-sizing: border-box; min-width: 0; }

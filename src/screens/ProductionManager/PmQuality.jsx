@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, 
 import QcHistoryPanel from "../../components/QcHistoryPanel";
 import ReJourneyPanel from "../../components/ReJourneyPanel";
 import { getStageLabel } from "../../utils/barcodeService";
-import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, RankBars, Seg, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
+import { Chips, Empty, FilterButton, FilterGroup, Insight, PageHead, RankBars, Seg, barAxis, barMinWidth, fitBarLabel, labelRoom, num, textOn } from "../CeoDashboard/CeoUi";
 import { FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { CARD_INFO, COLUMN_INFO, TILE_INFO } from "./pmDefinitions";
 import { csvFromObjects } from "./PmCommon";
@@ -60,17 +60,19 @@ const Tip = ({ active, payload, label, format = num }) => {
 export function StackBars({ data, series, height = 260, format = num, onPick, stacked = true }) {
   if (!data?.length || !data.some((d) => series.some((s) => Number(d[s.key]) > 0))) return <Empty />;
   const last = series.length - 1;
+  const totals = data.map((d) => (stacked ? series.reduce((sum, x) => sum + (Number(d[x.key]) || 0), 0) : Math.max(...series.map((x) => Number(d[x.key]) || 0))));
   const inside = (color) => ({ x, y, width, height: h, value }) => (
     value && h >= 16 && width >= 18 && series.length > 1
       ? <text x={x + width / 2} y={y + h / 2} dy="0.35em" textAnchor="middle" fontSize={10.5} fontWeight={600} fill={textOn(color)} pointerEvents="none">{format(value)}</text>
       : null
   );
   return (
-    <div style={{ width: "100%", height, cursor: onPick ? "pointer" : undefined }}>
+    <div className="ceo-chart-scroll">
+    <div style={{ width: "100%", minWidth: barMinWidth(data.length), height, cursor: onPick ? "pointer" : undefined }}>
       <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
-        <BarChart data={data} margin={{ top: 22, right: 6, left: 0, bottom: 0 }}>
+        <BarChart data={data} margin={{ top: labelRoom(totals, format), right: 6, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#f1ede2" vertical={false} />
-          <XAxis dataKey="name" tick={axis} axisLine={false} tickLine={false} minTickGap={4} interval={0} tickFormatter={(v) => (String(v).length > 12 ? `${String(v).slice(0, 11)}…` : v)} />
+          <XAxis dataKey="name" axisLine={false} tickLine={false} {...barAxis(data.length)} />
           <YAxis tick={axis} axisLine={false} tickLine={false} width={36} allowDecimals={false} />
           <Tooltip content={<Tip format={format} />} cursor={{ fill: "rgba(184,146,46,.07)" }} />
           {series.map((s, i) => (
@@ -81,15 +83,14 @@ export function StackBars({ data, series, height = 260, format = num, onPick, st
               {(!stacked || i === last) && (
                 <LabelList
                   dataKey={stacked ? (d) => series.reduce((sum, x) => sum + (Number(d[x.key]) || 0), 0) : s.key}
-                  content={data.length > 16
-                    ? sparseBarLabel(data.map((d) => ({ ...d, __t: series.reduce((sum, x) => sum + (Number(d[x.key]) || 0), 0) })), stacked ? "__t" : s.key, format)
-                    : barValueLabel(format)}
+                  content={fitBarLabel(format, totals)}
                 />
               )}
             </Bar>
           ))}
         </BarChart>
       </ResponsiveContainer>
+    </div>
     </div>
   );
 }

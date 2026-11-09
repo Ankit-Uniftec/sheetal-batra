@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fmtDate as formatDate } from "./pmModel";
-import { Chips, Columns, Drawer, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, Pager, RankBars, barValueLabel, num, sparseBarLabel, textOn } from "../CeoDashboard/CeoUi";
+import { Chips, Columns, Drawer, Empty, FilterButton, FilterGroup, Icon, Insight, PageHead, Pager, RankBars, barAxis, barMinWidth, fitBarLabel, labelRoom, num, textOn } from "../CeoDashboard/CeoUi";
 import { ScanReport } from "./PmApprovals";
 import { CsvButton, FilterDrawer, defineKit } from "../CeoDashboard/dashKit";
 import { csvFromObjects } from "./PmCommon";
@@ -276,21 +276,23 @@ function DayStack({ rows, factories }) {
   );
   return (
     <>
-      <div style={{ width: "100%", height: 250 }}>
+      <div className="ceo-chart-scroll">
+      <div style={{ width: "100%", minWidth: barMinWidth(rows.length), height: 250 }}>
         <ResponsiveContainer initialDimension={{ width: 1, height: 1 }}>
-          <BarChart data={rows} margin={{ top: 22, right: 4, left: 0, bottom: 0 }}>
+          <BarChart data={rows} margin={{ top: labelRoom(rows.map((r) => r.total)), right: 4, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#f1ede2" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} minTickGap={6} />
+            <XAxis dataKey="name" axisLine={false} tickLine={false} {...barAxis(rows.length)} />
             <YAxis tick={{ fontSize: 11, fill: "#8a8478" }} axisLine={false} tickLine={false} width={40} allowDecimals={false} />
             <Tooltip cursor={{ fill: "rgba(184,146,46,.07)" }} />
             {factories.map((f, i) => (
               <Bar key={f.key} dataKey={f.key} name={f.name} stackId="a" fill={f.color} maxBarSize={36} isAnimationActive={false}>
                 <LabelList dataKey={f.key} content={segLabel(f.color)} />
-                {i === factories.length - 1 && <LabelList dataKey="total" content={rows.length > 16 ? sparseBarLabel(rows, "total", num) : barValueLabel(num)} />}
+                {i === factories.length - 1 && <LabelList dataKey="total" content={fitBarLabel(num, rows.map((r) => r.total))} />}
               </Bar>
             ))}
           </BarChart>
         </ResponsiveContainer>
+      </div>
       </div>
       <div className="pmp-legend">{factories.map((f) => <span key={f.key}><i style={{ background: f.color }} />{f.name}</span>)}</div>
     </>
