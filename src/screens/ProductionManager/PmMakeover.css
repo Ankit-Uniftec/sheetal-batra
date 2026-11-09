@@ -935,3 +935,11 @@
 .ceo.pm .ceo-grid > .ceo-card:has(> .ceo-chart-scroll:last-child) { display: flex; flex-direction: column; }
 .ceo.pm .ceo-grid > .ceo-card > .ceo-chart-scroll:last-child { flex: 1 1 auto; display: flex; flex-direction: column; }
 .ceo.pm .ceo-grid > .ceo-card > .ceo-chart-scroll:last-child > div { flex: 1 1 auto; height: auto !important; min-height: 250px; }
+
+/* Stuck by Stage: each row's length is its count; inside it every segment is at least as
+   wide as its number, with the number centred (no squeezed digits at the edge). */
+.ceo.pm .pmf-fill { display: flex; height: 100%; min-width: max-content; }
+.ceo.pm .pmf-fill .pmf-seg { flex-basis: 0; min-width: max-content; width: auto; padding: 0 8px; justify-content: center; }
+.ceo.pm .pmf-fill .pmf-seg + .pmf-seg { box-shadow: inset 1px 0 0 rgba(255, 255, 255, .7); }
+/* Stock by product: room between the figures and the table. */
+.ceo.pm .pm-pools-stats { margin: 12px 0 16px; }

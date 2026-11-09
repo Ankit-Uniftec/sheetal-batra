@@ -157,12 +157,14 @@ function StuckBars({ ctx, stuck }) {
             <b>{g.label}</b><small>{num(here.length)}</small>
           </button>
           <span className="pmf-track">
+            <span className="pmf-fill" style={{ width: `${(here.length / max) * 100}%` }}>
             {segs.filter((s) => s.list.length).map((s) => (
-              <button key={s.key} type="button" className={`pmf-seg is-${s.key}`} style={{ width: `${(s.list.length / max) * 100}%` }} title={`${num(s.list.length)} ${s.label}`}
+              <button key={s.key} type="button" className={`pmf-seg is-${s.key}`} style={{ flexGrow: s.list.length }} title={`${num(s.list.length)} ${s.label}`}
                 onClick={() => ctx.openPieces({ title: `${g.label}: ${s.label}`, sub: "Pieces of active orders not moved for 7+ days", pieces: s.list })}>
                 <span>{num(s.list.length)}</span>
               </button>
             ))}
+            </span>
           </span>
         </div>
       ))}

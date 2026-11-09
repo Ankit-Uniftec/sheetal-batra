@@ -211,7 +211,7 @@ export function StockPools({ ctx }) { // eslint-disable-line no-unused-vars
 
           <h4 className="pm-pools-sub">Stock by product</h4>
           <ListTools search={search} onSearch={setSearch} placeholder="Search product or SKU" filters={active} onFilters={() => setOpen(true)} onExport={exportCsv} exportDisabled={!list.length} />
-          <div className="ceo-dstats">
+          <div className="ceo-dstats pm-pools-stats">
             <Stat label="Products" info="Products with stock (or a negative balance) in any pool, matching the filters."><b>{num(list.length)}</b></Stat>
             <Stat label="Units" info="Units of these products across the pools."><b>{num(list.reduce((s, r) => s + r.total, 0))}</b></Stat>
             <Stat label="Negative Balances" info="Products with a balance below zero in at least one pool."><b className={list.some((r) => r.negative) ? "is-warn" : undefined}>{num(list.filter((r) => r.negative).length)}</b></Stat>
