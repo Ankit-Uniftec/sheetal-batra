@@ -69,17 +69,32 @@ t("planUpdates writes only differences, reports unlinked sizes", () => {
   assert.strictEqual(p.updates[1].to, null);
 });
 
-t("planUpdates puts Shopify's number on one row when a size is stored twice", () => {
+t("planUpdates: a size with TWO Shopify variants keeps both rows, so the app total = Shopify's", () => {
+  const two = { variants: { nodes: [
+    ...product.variants.nodes,
+    { id: "gid://shopify/ProductVariant/21", price: "12500.00", selectedOptions: [{ name: "Size", value: "S" }], inventoryItem: { id: "gid://shopify/InventoryItem/121", inventoryLevels: { nodes: [lvl("L", 0)] } } },
+  ] } };
+  const rows = [
+    { id: "s1", size: "S", inventory: 3, price: 12500, shopify_variant_id: "11", shopify_inventory_item_id: "gid://shopify/InventoryItem/111" },
+    { id: "s2", size: "S", inventory: 0, price: 12500, shopify_variant_id: "21", shopify_inventory_item_id: "gid://shopify/InventoryItem/121" },
+  ];
+  const p = L.planUpdates(rows, L.readingsFromProduct(two, ""));
+  assert.strictEqual(p.updates.length, 0); // both mirror their own variant already
+  assert.deepStrictEqual(p.unlinked, []);
+});
+
+t("planUpdates: a row copying another row's variant is kept at 0; customs ignored", () => {
   const rows = [
     { id: "a1", size: "S", inventory: 4, price: 12500, shopify_variant_id: "" },
     { id: "a2", size: "S", inventory: 1, price: 12500, shopify_variant_id: "11", shopify_inventory_item_id: "gid://shopify/InventoryItem/111" },
     { id: "a3", size: "S ", inventory: 2, price: 12500, shopify_variant_id: "11", shopify_inventory_item_id: "gid://shopify/InventoryItem/111" },
+    { id: "c1", size: "Custom", inventory: 0, price: 0, shopify_variant_id: "13" },
   ];
   const p = L.planUpdates(rows, L.readingsFromProduct(product, ""));
   const byId = Object.fromEntries(p.updates.map((u) => [u.id, u.fields.inventory]));
-  // a3 (linked, most stock) keeps Shopify's 3; the other copies go to 0
-  assert.deepStrictEqual(byId, { a3: 3, a1: 0, a2: 0 });
-  const after = rows.map((r) => ({ size: r.size.trim(), inventory: byId[r.id] ?? r.inventory }));
+  assert.deepStrictEqual(byId, { a3: 3, a1: 0, a2: 0 }); // a3 (most stock) keeps variant 11
+  assert.deepStrictEqual(p.unlinked, []);
+  const after = rows.filter((r) => r.id !== "c1").map((r) => ({ size: r.size.trim(), inventory: byId[r.id] ?? r.inventory }));
   assert.deepStrictEqual(L.inventoryMap(after), { S: 3 });
 });
 

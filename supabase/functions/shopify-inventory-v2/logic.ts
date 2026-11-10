@@ -105,18 +105,10 @@ export function readingsFromProduct(product: any, configuredLocation: string) {
 }
 
 /**
- * Compare the app's size rows for ONE design with Shopify's readings.
- *
- * @param rows      product_variants rows: { id, size, inventory, price, shopify_variant_id, shopify_inventory_item_id }
- * @param readings  readingsFromProduct(...) for the same design
- * @returns updates to write (only rows that differ), sizes the app has but
- *          Shopify cannot vouch for, and readings that failed.
- */
-/**
- * The ONE app row that holds a size's stock when the size is stored more than
- * once (358 sizes are). Linked to Shopify first, then the most stock, then id,
- * so the sync and every write pick the same row. The others are kept at 0, or
- * the app would add them up and show double Shopify's number.
+ * The row a change for one size goes to when the size is stored more than once
+ * (Shopify has two variants per size on many designs): linked to Shopify
+ * first, then the most stock, then id — so a sale comes off the variant that
+ * actually holds the stock.
  */
 export function canonicalRow<T extends { id: string; inventory?: unknown; shopify_variant_id?: unknown }>(rows: T[]): T | null {
   const sorted = [...(rows || [])].sort((a, b) =>
@@ -127,51 +119,72 @@ export function canonicalRow<T extends { id: string; inventory?: unknown; shopif
 }
 
 export const sizeKey = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+const isCustom = (s: unknown) => sizeKey(s).includes("custom");
 
 /**
  * Shopify's variant for an app size, matched by size name (S = s = " S ").
- * Used when a size has no variant id yet, or one that is not on this product.
- * Two Shopify variants with the same size name (e.g. two colours) → no match.
+ * Two candidate variants with the same size name → no match (never guess).
  */
 export function matchBySize<T extends { size: string }>(size: unknown, readings: T[]): T | null {
   const hits = (readings || []).filter((r) => sizeKey(r.size) === sizeKey(size));
   return hits.length === 1 ? hits[0] : null;
 }
 
+/**
+ * Compare the app's size rows for ONE design with Shopify's readings.
+ *
+ * Each app row mirrors ONE Shopify variant, so the app's per-size total equals
+ * Shopify's (a size with two Shopify variants keeps two rows). A row with no
+ * variant id, or one not on this product, is linked by size name to a Shopify
+ * variant no other row holds. A row that copies another row's variant, or
+ * cannot be linked while its size is covered by another row, is kept at 0 so
+ * the size is not counted twice. Custom sizes are ignored.
+ *
+ * @returns updates (only rows that differ), sizes with no Shopify match,
+ *          failed readings, and the rows newly linked.
+ */
 export function planUpdates(rows: any[], readings: ReturnType<typeof readingsFromProduct>) {
   const byVariant = new Map(readings.map((r) => [r.variantId, r]));
   const updates: Array<{ id: string; fields: Record<string, unknown>; size: string; from: number; to: number | null }> = [];
   const unlinked: string[] = [];
   const failed: string[] = [];
   const linked: Array<{ id: string; size: string; variantId: string }> = [];
-  const groups = new Map<string, any[]>();
-  for (const row of rows || []) {
-    const k = sizeKey(row.size);
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k)!.push(row);
+  const real = (rows || []).filter((r) => !isCustom(r.size));
+  // Most stock first, so when two rows copy one variant the stocked one keeps it.
+  const ordered = [...real].sort((a, b) => (Number(b.inventory) || 0) - (Number(a.inventory) || 0) || String(a.id).localeCompare(String(b.id)));
+  const claimed = new Set<string>();
+  const holder = new Map<string, ReturnType<typeof readingsFromProduct>[number]>(); // row id → reading
+  for (const row of ordered) {
+    const gid = toGid(row.shopify_variant_id, "ProductVariant");
+    if (gid && byVariant.has(gid) && !claimed.has(gid)) { claimed.add(gid); holder.set(row.id, byVariant.get(gid)!); }
   }
-  for (const group of groups.values()) {
-    const keep = canonicalRow(group)!;
-    let r = byVariant.get(toGid(keep.shopify_variant_id, "ProductVariant"));
-    let newLink = false;
-    if (!r) {
-      // No variant id (or one this product doesn't have): link it by size name.
-      const m = matchBySize(keep.size, readings);
-      if (!m) { unlinked.push(keep.size); continue; }
-      r = m; newLink = true;
-      linked.push({ id: keep.id, size: keep.size, variantId: m.variantId });
-    }
-    if (r.error || r.available === null) { failed.push(`${keep.size}: ${r.error || "no quantity"}`); continue; }
-    for (const row of group) {
-      const target = row === keep ? r.available : 0; // Shopify's number lives on one row only
-      const fields: Record<string, unknown> = {};
-      if (Number(row.inventory) !== target) fields.inventory = target;
+  for (const row of ordered) {
+    if (holder.has(row.id)) continue;
+    const free = readings.filter((r) => !claimed.has(r.variantId));
+    const m = matchBySize(row.size, free);
+    if (m) { claimed.add(m.variantId); holder.set(row.id, m); linked.push({ id: row.id, size: row.size, variantId: m.variantId }); }
+  }
+  const covered = new Set(real.filter((r) => holder.has(r.id)).map((r) => sizeKey(r.size)));
+  const reported = new Set<string>();
+  for (const row of real) {
+    const r = holder.get(row.id);
+    let target: number;
+    const fields: Record<string, unknown> = {};
+    if (r) {
+      if (r.error || r.available === null) { failed.push(`${row.size}: ${r.error || "no quantity"}`); continue; }
+      target = r.available;
       if (r.price !== null && row.price !== undefined && Number(row.price) !== r.price) fields.price = r.price;
-      if (row === keep && r.inventoryItemId && row.shopify_inventory_item_id !== r.inventoryItemId) fields.shopify_inventory_item_id = r.inventoryItemId;
-      if (row === keep && newLink) fields.shopify_variant_id = r.variantId;
-      if (Object.keys(fields).length) {
-        updates.push({ id: row.id, fields, size: row.size, from: Number(row.inventory) || 0, to: fields.inventory === undefined ? null : target });
-      }
+      if (r.inventoryItemId && row.shopify_inventory_item_id !== r.inventoryItemId) fields.shopify_inventory_item_id = r.inventoryItemId;
+      if (toGid(row.shopify_variant_id, "ProductVariant") !== r.variantId) fields.shopify_variant_id = r.variantId;
+    } else if (covered.has(sizeKey(row.size))) {
+      target = 0; // a copy: another row already mirrors this size on Shopify
+    } else {
+      if (!reported.has(sizeKey(row.size))) { unlinked.push(row.size); reported.add(sizeKey(row.size)); }
+      continue;
+    }
+    if (Number(row.inventory) !== target) fields.inventory = target;
+    if (Object.keys(fields).length) {
+      updates.push({ id: row.id, fields, size: row.size, from: Number(row.inventory) || 0, to: fields.inventory === undefined ? null : target });
     }
   }
   return { updates, unlinked, failed, linked };

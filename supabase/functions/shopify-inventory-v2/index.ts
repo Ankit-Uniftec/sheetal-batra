@@ -213,11 +213,10 @@ async function write(input: WriteInput) {
   const { action, productId, size, dryRun } = input;
   if (!productId || !size) return { success: false, error: "product_id and size are required." };
 
-  // A size can be stored more than once: use the same row the sync uses.
+  // A size can have two Shopify variants (two rows): change the one holding stock.
   const { data: sameSize } = await supabase.from("product_variants")
     .select("id, inventory, shopify_variant_id").eq("product_id", productId).eq("size", size);
   const variant = canonicalRow(sameSize || []);
-  const otherIds = (sameSize || []).filter((r: any) => r.id !== variant?.id && Number(r.inventory)).map((r: any) => r.id);
   let variantGid = toGid(variant?.shopify_variant_id, "ProductVariant");
   if (variant && !variantGid) {
     // Not linked yet (a new design entered with only its product id): read the
@@ -263,7 +262,6 @@ async function write(input: WriteInput) {
     }
     if (d.delta === 0) {
       await supabase.from("product_variants").update({ inventory: read.available, shopify_inventory_item_id: read.inventoryItemId, last_synced_at: new Date().toISOString() }).eq("id", variant.id);
-      if (otherIds.length) await supabase.from("product_variants").update({ inventory: 0 }).in("id", otherIds);
       await logUpdate(logId, { status: "sent", before_qty: read.available, delta: 0, after_qty: read.available, location_id: read.locationId });
       return { success: true, before: read.available, delta: 0, after: read.available, log_id: logId };
     }
@@ -296,7 +294,6 @@ async function write(input: WriteInput) {
     const userErrors = r.data?.inventoryAdjustQuantities?.userErrors || [];
     if (!r.errors?.length && !userErrors.length && r.data?.inventoryAdjustQuantities) {
       await supabase.from("product_variants").update({ inventory: after, shopify_inventory_item_id: read.inventoryItemId, last_synced_at: new Date().toISOString() }).eq("id", variant.id);
-      if (otherIds.length) await supabase.from("product_variants").update({ inventory: 0 }).in("id", otherIds);
       await logUpdate(logId, { status: "sent", before_qty: read.available, delta: d.delta, after_qty: after, location_id: read.locationId, error: null });
       return { success: true, before: read.available, delta: d.delta, after, log_id: logId };
     }
