@@ -126,13 +126,24 @@ export function canonicalRow<T extends { id: string; inventory?: unknown; shopif
   return sorted[0] || null;
 }
 
-const sizeKey = (s: unknown) => String(s ?? "").trim().toLowerCase();
+export const sizeKey = (s: unknown) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * Shopify's variant for an app size, matched by size name (S = s = " S ").
+ * Used when a size has no variant id yet, or one that is not on this product.
+ * Two Shopify variants with the same size name (e.g. two colours) → no match.
+ */
+export function matchBySize<T extends { size: string }>(size: unknown, readings: T[]): T | null {
+  const hits = (readings || []).filter((r) => sizeKey(r.size) === sizeKey(size));
+  return hits.length === 1 ? hits[0] : null;
+}
 
 export function planUpdates(rows: any[], readings: ReturnType<typeof readingsFromProduct>) {
   const byVariant = new Map(readings.map((r) => [r.variantId, r]));
   const updates: Array<{ id: string; fields: Record<string, unknown>; size: string; from: number; to: number | null }> = [];
   const unlinked: string[] = [];
   const failed: string[] = [];
+  const linked: Array<{ id: string; size: string; variantId: string }> = [];
   const groups = new Map<string, any[]>();
   for (const row of rows || []) {
     const k = sizeKey(row.size);
@@ -141,8 +152,15 @@ export function planUpdates(rows: any[], readings: ReturnType<typeof readingsFro
   }
   for (const group of groups.values()) {
     const keep = canonicalRow(group)!;
-    const r = byVariant.get(toGid(keep.shopify_variant_id, "ProductVariant"));
-    if (!r) { unlinked.push(keep.size); continue; }
+    let r = byVariant.get(toGid(keep.shopify_variant_id, "ProductVariant"));
+    let newLink = false;
+    if (!r) {
+      // No variant id (or one this product doesn't have): link it by size name.
+      const m = matchBySize(keep.size, readings);
+      if (!m) { unlinked.push(keep.size); continue; }
+      r = m; newLink = true;
+      linked.push({ id: keep.id, size: keep.size, variantId: m.variantId });
+    }
     if (r.error || r.available === null) { failed.push(`${keep.size}: ${r.error || "no quantity"}`); continue; }
     for (const row of group) {
       const target = row === keep ? r.available : 0; // Shopify's number lives on one row only
@@ -150,12 +168,13 @@ export function planUpdates(rows: any[], readings: ReturnType<typeof readingsFro
       if (Number(row.inventory) !== target) fields.inventory = target;
       if (r.price !== null && row.price !== undefined && Number(row.price) !== r.price) fields.price = r.price;
       if (row === keep && r.inventoryItemId && row.shopify_inventory_item_id !== r.inventoryItemId) fields.shopify_inventory_item_id = r.inventoryItemId;
+      if (row === keep && newLink) fields.shopify_variant_id = r.variantId;
       if (Object.keys(fields).length) {
         updates.push({ id: row.id, fields, size: row.size, from: Number(row.inventory) || 0, to: fields.inventory === undefined ? null : target });
       }
     }
   }
-  return { updates, unlinked, failed };
+  return { updates, unlinked, failed, linked };
 }
 
 /** { size: qty } of sizes in stock — the shape every app caller already reads. */

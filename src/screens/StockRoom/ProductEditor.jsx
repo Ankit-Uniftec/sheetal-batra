@@ -425,7 +425,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
             <tr>
               <th><span className="sr-th-stack"><span>Size</span>{selectAllLink}</span></th>
               <th>Available</th>
-              {type === TYPE_LXRTS && <th>Shopify Variant ID</th>}
+              {type === TYPE_LXRTS && <th title="Leave blank: the sync fills it from Shopify by matching the size name">Shopify Variant ID (optional)</th>}
               {isEdit && type === TYPE_LXRTS && <th className="n">On hand</th>}
               {showStock && columns.map((c) => (
                 <th key={c || "unassigned"} className="n">
@@ -453,7 +453,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
                   </td>
                   {type === TYPE_LXRTS && (
                     <td>
-                      <input className="sr-input" type="text" value={r.vid} placeholder="4471920038" disabled={!r.on}
+                      <input className="sr-input" type="text" value={r.vid} placeholder="Filled from Shopify" disabled={!r.on}
                         onChange={(e) => updateSize(s, { vid: e.target.value })} aria-label={`Size ${s} Shopify variant ID`} />
                     </td>
                   )}

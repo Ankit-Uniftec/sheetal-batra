@@ -150,11 +150,12 @@ const VARIANT_COLS = "id, product_id, size, inventory, price, shopify_variant_id
  * @returns per-design results for the caller to report.
  */
 async function refreshProducts(productIds: string[], dryRun = false) {
-  const results: Record<string, { updated: number; unlinked: string[]; failed: string[]; changes: unknown[] }> = {};
+  const results: Record<string, { name?: string; updated: number; unlinked: string[]; failed: string[]; changes: unknown[]; linked?: Array<{ id: string; size: string; variantId: string }> }> = {};
   if (!productIds.length) return { results, stoppedEarly: false };
-  const { data: products, error: pErr } = await supabase.from("products").select("id, shopify_product_id").in("id", productIds);
+  const { data: products, error: pErr } = await supabase.from("products").select("id, name, shopify_product_id").in("id", productIds);
   if (pErr) throw new Error(pErr.message);
   const gidOf = new Map<string, string>();
+  const nameOf = new Map<string, string>((products || []).map((p: any) => [p.id, p.name || p.id]));
   for (const p of products || []) {
     const gid = toGid(p.shopify_product_id, "Product");
     if (gid.startsWith("gid://shopify/Product/")) gidOf.set(p.id, gid);
@@ -180,7 +181,7 @@ async function refreshProducts(productIds: string[], dryRun = false) {
       const linkedIds = mine.filter((r: any) => !touched.has(r.id) && !plan.unlinked.includes(r.size)).map((r: any) => r.id);
       if (linkedIds.length) await supabase.from("product_variants").update({ last_synced_at: now }).in("id", linkedIds);
     }
-    results[productId] = { updated, unlinked: plan.unlinked, failed: plan.failed, changes: plan.updates.filter((u) => u.to !== null).map((u) => ({ id: u.id, size: u.size, from: u.from, to: u.to })) };
+    results[productId] = { name: nameOf.get(productId), updated, unlinked: plan.unlinked, failed: plan.failed, linked: plan.linked, changes: plan.updates.filter((u) => u.to !== null).map((u) => ({ id: u.id, size: u.size, from: u.from, to: u.to })) };
   }
   return { results, stoppedEarly };
 }
@@ -217,7 +218,14 @@ async function write(input: WriteInput) {
     .select("id, inventory, shopify_variant_id").eq("product_id", productId).eq("size", size);
   const variant = canonicalRow(sameSize || []);
   const otherIds = (sameSize || []).filter((r: any) => r.id !== variant?.id && Number(r.inventory)).map((r: any) => r.id);
-  const variantGid = toGid(variant?.shopify_variant_id, "ProductVariant");
+  let variantGid = toGid(variant?.shopify_variant_id, "ProductVariant");
+  if (variant && !variantGid) {
+    // Not linked yet (a new design entered with only its product id): read the
+    // design from Shopify, which links its sizes by name, then use that link.
+    const { results } = await refreshProducts([productId], dryRun);
+    const link = (results[productId]?.linked || []).find((l) => l.id === variant.id);
+    if (link) variantGid = link.variantId;
+  }
 
   const base = {
     action, source: input.source || null, order_no: input.orderNo || null,
@@ -327,7 +335,9 @@ async function runSync() {
 
     const { results, stoppedEarly } = await refreshProducts(targets);
     const changed = Object.values(results).reduce((s, r) => s + r.updated, 0);
-    const problems = Object.entries(results).filter(([, r]) => r.failed.length).map(([id, r]) => `${id}: ${r.failed.join(", ")}`);
+    const problems = Object.values(results)
+      .filter((r) => r.failed.length || r.unlinked.length)
+      .map((r) => `${r.name}: ${[...r.failed, ...(r.unlinked.length ? [`no Shopify size for ${r.unlinked.join(", ")}`] : [])].join(", ")}`);
     if (changed) {
       const rows = Object.entries(results).flatMap(([productId, r]) => (r.changes as any[]).map((c) => ({
         action: "sync", source: "scheduled-sync", product_id: productId, size: c.size,

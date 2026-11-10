@@ -83,6 +83,26 @@ t("planUpdates puts Shopify's number on one row when a size is stored twice", ()
   assert.deepStrictEqual(L.inventoryMap(after), { S: 3 });
 });
 
+t("planUpdates links sizes by name when only the product id was entered", () => {
+  const rows = [
+    { id: "n1", size: " s", inventory: 7, price: 12500, shopify_variant_id: null },
+    { id: "n2", size: "M", inventory: 0, price: 12500, shopify_variant_id: "gid://shopify/ProductVariant/999" }, // wrong id
+    { id: "n3", size: "XXL", inventory: 2, price: 12500, shopify_variant_id: "" },
+  ];
+  const p = L.planUpdates(rows, L.readingsFromProduct(product, ""));
+  assert.deepStrictEqual(p.linked.map((l) => [l.id, l.variantId]), [["n1", "gid://shopify/ProductVariant/11"], ["n2", "gid://shopify/ProductVariant/12"]]);
+  const n1 = p.updates.find((u) => u.id === "n1");
+  assert.deepStrictEqual(n1.fields, { inventory: 3, shopify_inventory_item_id: "gid://shopify/InventoryItem/111", shopify_variant_id: "gid://shopify/ProductVariant/11" });
+  assert.strictEqual(p.updates.find((u) => u.id === "n2").fields.shopify_variant_id, "gid://shopify/ProductVariant/12");
+  assert.deepStrictEqual(p.unlinked, ["XXL"]); // reported, never guessed
+});
+
+t("matchBySize refuses an ambiguous size", () => {
+  assert.strictEqual(L.matchBySize("S", [{ size: "S" }, { size: "s " }]), null);
+  assert.deepStrictEqual(L.matchBySize("free  size", [{ size: "Free Size" }]), { size: "Free Size" });
+  assert.strictEqual(L.matchBySize("2XL", [{ size: "XXL" }]), null);
+});
+
 t("canonicalRow prefers linked, then most stock, then id", () => {
   assert.strictEqual(L.canonicalRow([{ id: "x", inventory: 9, shopify_variant_id: null }, { id: "y", inventory: 0, shopify_variant_id: "5" }]).id, "y");
   assert.strictEqual(L.canonicalRow([{ id: "b", inventory: 0, shopify_variant_id: "5" }, { id: "a", inventory: 0, shopify_variant_id: "5" }]).id, "a");
