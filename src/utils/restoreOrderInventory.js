@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
-import config from "../config/config";
 import { getOrderChannelKey } from "./barcodeService";
+import { changeShopifyStock } from "./shopifyInventory";
 
 // ============================================================
 // Restore the inventory an order reserved at placement, when it is
@@ -8,8 +8,7 @@ import { getOrderChannelKey } from "./barcodeService";
 // ReviewDetail.js (and CommsReviewOrder.jsx):
 //   - LXRTS / Shopify-synced item (item.sync_enabled): add qty back to the
 //     size-specific product_variants row, and push the increase to Shopify
-//     (the shopify-inventory edge fn only has a "reduce" action, where a
-//     NEGATIVE quantity increases stock — same trick InventoryDashboard uses).
+//     (changeShopifyStock, +qty).
 //   - Normal / custom item: add qty back to products.inventory.
 //
 // Non-blocking by design: any failure is logged and swallowed so it can
@@ -54,28 +53,13 @@ export async function restoreOrderInventory(order) {
                     if (updateError) console.error("restoreOrderInventory: variant update error:", updateError);
                 }
 
-                // Push the increase to Shopify — "reduce" with a negative qty
-                // increases stock (mirrors InventoryDashboard's manual increase).
+                // Push the increase to Shopify (+qty). Logged by the function;
+                // a failure is listed for retry and never blocks the cancel.
                 try {
-                    const response = await fetch(
-                        `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
-                        {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "apikey": config.SUPABASE_KEY,
-                                "Authorization": `Bearer ${config.SUPABASE_KEY}`,
-                            },
-                            body: JSON.stringify({
-                                action: "reduce",
-                                product_id: item.product_id,
-                                size: item.size,
-                                quantity: -qty,
-                            }),
-                        }
-                    );
-                    const result = await response.json();
-                    if (!result?.success) console.error("restoreOrderInventory: Shopify increase failed:", result?.error);
+                    const sync = await changeShopifyStock(item.product_id, item.size, qty, {
+                        source: "order-cancelled", orderNo: order.order_no,
+                    });
+                    if (!sync.ok) console.error("restoreOrderInventory: Shopify increase failed:", sync.error);
                 } catch (shopifyErr) {
                     console.error("restoreOrderInventory: Shopify sync error:", shopifyErr);
                 }

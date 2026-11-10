@@ -4,7 +4,7 @@ import { PField, FieldRow, Combo, StockHint } from "./ProductFormUi";
 import {
   placeStock, transferStock, sellStock, receiveStock, adjustStock, assignSale, newRequestId,
 } from "./stockRoomData";
-import { settleShopify, pullShopifyStock, SHOPIFY_SYNC_ON } from "./stockRoomShopify";
+import { settleShopify, pullShopifyStock, SHOPIFY_SYNC_ON, exactTargets } from "./stockRoomShopify";
 import { formatUnits, formatInr, sizeLabel, sortSizes, orderPrefix, formatDay, TYPE_LXRTS, TYPE_CUSTOM } from "./stockRoomModel";
 
 // ============================================================
@@ -273,7 +273,11 @@ export default function StockActionForm({ mode, initial = {}, view, onClose, onD
         message = `Sale assigned to ${nameOf(locationId)}.`;
       }
 
-      const shopify = await settleShopify(result?.movements);
+      // A full recount (no location) sets Shopify to the counted number;
+      // everything else is sent as a change.
+      const shopify = await settleShopify(result?.movements, exactTargets({
+        mode, locationId, productId: single?.productId, size: single?.size, counted,
+      }));
       let tone = "ok";
       if (shopify.failed.length) {
         tone = "crit";

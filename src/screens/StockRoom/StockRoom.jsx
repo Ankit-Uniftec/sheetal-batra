@@ -6,7 +6,7 @@ import { isProdEnvironment } from "../../utils/appEnvironment";
 import {
   loadStockRoomUser, loadStockRoomCatalogue, loadStockOrders, loadSales, loadLedger, signOutOfStockRoom,
 } from "./stockRoomData";
-import { WRITES_ON, SHOPIFY_SYNC_ON, COUNT_CHANGES_ON, PRODUCT_WRITES_ON, COUNT_CHANGING_ACTIONS, pullShopifyStock } from "./stockRoomShopify";
+import { WRITES_ON, SHOPIFY_SYNC_ON, COUNT_CHANGES_ON, PRODUCT_WRITES_ON, COUNT_CHANGING_ACTIONS, syncWithShopify } from "./stockRoomShopify";
 import useStockRoomView from "./useStockRoomView";
 import { Icon, Toast } from "./StockRoomUi";
 import { formatUnits, timeAgo } from "./stockRoomModel";
@@ -91,6 +91,7 @@ export default function StockRoom() {
   // Shopify → database pull, as the old inventory dashboard does: { running, result }.
   const [shopifySync, setShopifySync] = useState({ running: false, result: null });
   const syncingRef = useRef(false);
+  const syncSinceRef = useRef(null);
   // Signed in, but not a role the Stock Room serves: say so, keep the session.
   const [denied, setDenied] = useState(false);
 
@@ -99,14 +100,18 @@ export default function StockRoom() {
     setError(err.message || "Could not load stock.");
   }, []);
 
-  // Copy Shopify's LXRTS counts into product_variants (Shopify wins), then
-  // re-read the catalogue if anything changed. Production with sync on only.
+  // Keep LXRTS counts in step with Shopify (Shopify wins), then re-read the
+  // catalogue if anything changed. While the every-minute job is healthy this
+  // only asks which designs it updated since the last check; otherwise it reads
+  // every LXRTS design from Shopify. Production with sync on only.
   const syncFromShopify = useCallback(async (cat) => {
     if (!SHOPIFY_SYNC_ON || !cat || syncingRef.current) return;
     syncingRef.current = true;
     setShopifySync((s) => ({ ...s, running: true }));
     try {
-      const result = await pullShopifyStock(cat.products, cat.variants);
+      const since = syncSinceRef.current || new Date().toISOString();
+      syncSinceRef.current = new Date().toISOString();
+      const result = await syncWithShopify(cat.products, cat.variants, since);
       if (result?.updated) setCatalogue(await loadStockRoomCatalogue());
       setShopifySync({ running: false, result });
     } catch (err) {

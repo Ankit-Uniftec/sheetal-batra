@@ -8,7 +8,6 @@ import Logo from "../images/logo.png";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import "./Screen7.css";
 import formatPhoneNumber from "../utils/formatPhoneNumber";
-import config from "../config/config";
 import { generateAllPdfs } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
 import { isOrderMode, clearOrderMode } from "../utils/orderMode";
@@ -18,6 +17,7 @@ import AdvanceProofPicker from "../components/AdvanceProofPicker";
 import { uploadPendingAdvanceProofs } from "../utils/pendingAdvanceProof";
 import { logShippingWaiver } from "../utils/shippingWaiver";
 import { advanceProofParts } from "../utils/paymentProofs";
+import { changeShopifyStock } from "../utils/shopifyInventory";
 
 // Auto Signature Logo URL
 const AUTO_SIGNATURE_URL = "https://qlqvchcvuwjnfranqcmx.supabase.co/storage/v1/object/public/signature/logo.png";
@@ -883,30 +883,15 @@ export default function ReviewDetail() {
           } else {
           }
 
-          // Shopify sync
+          // Shopify sync: lower the same size on Shopify. The function reads
+          // Shopify's current number, applies -qty, writes the result back to
+          // product_variants and logs it; a failure is recorded for retry and
+          // never blocks the order.
           try {
-            const response = await fetch(
-              `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "apikey": config.SUPABASE_KEY,
-                  "Authorization": `Bearer ${config.SUPABASE_KEY}`,
-                },
-                body: JSON.stringify({
-                  action: "reduce",
-                  product_id: item.product_id,
-                  size: item.size,
-                  quantity: quantityOrdered,
-                }),
-              }
-            );
-
-            const reduceResult = await response.json();
-            if (!reduceResult.success) {
-              console.error("   ❌ Shopify reduce failed:", reduceResult.error);
-            }
+            const sync = await changeShopifyStock(item.product_id, item.size, -quantityOrdered, {
+              source: "order-placed", orderNo: insertedOrder?.order_no,
+            });
+            if (!sync.ok) console.error("   ❌ Shopify reduce failed:", sync.error);
           } catch (shopifyErr) {
             console.error("   ❌ Shopify sync error:", shopifyErr);
           }

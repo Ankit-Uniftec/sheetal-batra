@@ -9,6 +9,7 @@ import { usePopup } from "../../components/Popup";
 import { generateAllPdfs } from "../../utils/pdfLazy";
 import { NOTIFICATION_TYPES, sendNotification } from "../../utils/notificationService";
 import config from "../../config/config";
+import { changeShopifyStock } from "../../utils/shopifyInventory";
 
 /**
  * CommsReviewOrder — final step of the comms order flow.
@@ -297,28 +298,16 @@ export default function CommsReviewOrder() {
                   .from("product_variants")
                   .update({ inventory: newInventory })
                   .eq("id", variant.id);
-                // Shopify sync (same edge function B2C uses)
-                try {
-                  await fetch(
-                    `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
-                    {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        "apikey": config.SUPABASE_KEY,
-                        "Authorization": `Bearer ${config.SUPABASE_KEY}`,
-                      },
-                      body: JSON.stringify({
-                        action: "reduce",
-                        product_id: item.product_id,
-                        size: item.size,
-                        quantity: quantityOrdered,
-                      }),
-                    }
-                  );
-                } catch (shopifyErr) {
-                  console.warn("Shopify sync failed (non-blocking):", shopifyErr);
-                }
+              }
+              // Shopify sync (same as store orders), whatever the app's own
+              // count said: Shopify holds the true number. Non-blocking.
+              try {
+                const sync = await changeShopifyStock(item.product_id, item.size, -quantityOrdered, {
+                  source: "order-placed", orderNo: orderRow.order_no,
+                });
+                if (!sync.ok) console.warn("Shopify sync failed (non-blocking):", sync.error);
+              } catch (shopifyErr) {
+                console.warn("Shopify sync failed (non-blocking):", shopifyErr);
               }
             } else {
               // Regular product — single inventory column on products.

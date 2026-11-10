@@ -21,7 +21,6 @@ import CancellationsPanel from "../../components/CancellationsPanel";
 import OutstandingPanel from "../../components/OutstandingPanel";
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import SearchByDropdown from "../../components/SearchByDropdown";
-import config from "../../config/config";
 import { getOrderChannelLabel } from "../../utils/barcodeService";
 import { fetchQcRecords } from "../../utils/qcHistory";
 import {
@@ -199,28 +198,20 @@ export default function COODashboard() {
     }, []);
 
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+    // The every-minute Shopify sync (shopify-inventory-v2) keeps
+    // product_variants current, so read the app's copy in one paged query
+    // instead of asking Shopify once per design.
     const fetchAllLxrtsInventory = async (lxrtsProducts) => {
         setLxrtsSyncLoading(true);
+        const ids = new Set(lxrtsProducts.map((p) => p.id));
+        const { data, error } = await fetchAllRows("product_variants", (q) => q.select("id, product_id, size, inventory").order("id"));
+        if (error) console.error("LXRTS stock load failed:", error);
         const inventoryMap = {};
-        await Promise.allSettled(lxrtsProducts.map(async (product) => {
-            try {
-                const response = await fetch(`${config.SUPABASE_URL}/functions/v1/shopify-inventory`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", apikey: config.SUPABASE_KEY, Authorization: `Bearer ${config.SUPABASE_KEY}` },
-                    body: JSON.stringify({ action: "fetch", product_id: product.id }),
-                });
-                const result = await response.json();
-                if (result.success && result.inventory) inventoryMap[product.id] = result.inventory;
-                else {
-                    const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
-                    if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
-                }
-            } catch (err) {
-                console.error(`Error syncing ${product.name}:`, err);
-                const { data: variants } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
-                if (variants) { const map = {}; variants.forEach(v => { map[v.size] = v.inventory || 0; }); inventoryMap[product.id] = map; }
-            }
-        }));
+        (data || []).forEach((v) => {
+            if (!ids.has(v.product_id)) return;
+            if (!inventoryMap[v.product_id]) inventoryMap[v.product_id] = {};
+            inventoryMap[v.product_id][v.size] = v.inventory || 0;
+        });
         setVariantInventory(inventoryMap);
         setLxrtsSyncLoading(false);
     };

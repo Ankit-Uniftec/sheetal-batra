@@ -1,6 +1,6 @@
 import { supabase } from "../../lib/supabaseClient";
 import { isProdEnvironment } from "../../utils/appEnvironment";
-import { adjustShopifyInventory, fetchShopifyInventory } from "../../utils/shopifyInventory";
+import { adjustShopifyInventory, fetchShopifyInventory, loadShopifySyncState, setShopifyStock } from "../../utils/shopifyInventory";
 
 // ============================================================
 // Stock Room — the ONLY place in the Stock Room allowed to talk to Shopify,
@@ -56,7 +56,7 @@ async function markShopify(ids, status, error = null) {
  *
  * @returns {{ sent: number, notSent: number, failed: string[] }}
  */
-export async function settleShopify(movements) {
+export async function settleShopify(movements, exact = {}) {
   const pending = (movements || []).filter((m) => m.shopify_status === "pending" && m.legacy_delta);
   if (!pending.length) return { sent: 0, notSent: 0, failed: [] };
 
@@ -64,7 +64,21 @@ export async function settleShopify(movements) {
     await markShopify(pending.map((m) => m.id), "not_sent", "Shopify sync is off for this environment");
     return { sent: 0, notSent: pending.length, failed: [] };
   }
-  return sendToShopify(pending);
+  return sendToShopify(pending, exact);
+}
+
+const sizeKey = (productId, size) => `${productId}|${String(size || "").trim().toLowerCase()}`;
+
+/**
+ * Exact Shopify targets for a stock action. Only a FULL recount (no location)
+ * is a count of the whole size, so only it sets Shopify to the counted number;
+ * a recount of one location, a sale and a receipt are movements and are sent
+ * as changes. Returns { "<product>|<size>": counted } or {}.
+ */
+export function exactTargets({ mode, locationId, productId, size, counted }) {
+  if (mode !== "adjust" || locationId || !productId) return {};
+  const n = Number(counted);
+  return Number.isInteger(n) && n >= 0 ? { [sizeKey(productId, size)]: n } : {};
 }
 
 /** Try again for rows previously not sent or failed. Production with sync on only. */
@@ -74,15 +88,19 @@ export async function retryShopify(movements) {
   return sendToShopify(rows);
 }
 
-async function sendToShopify(rows) {
+async function sendToShopify(rows, exact = {}) {
   const sent = [];
   const failed = [];
-  // One at a time: the edge function applies a relative change per call, and
-  // two changes to the same size must land in order.
+  // One at a time: two changes to the same size must land in order.
   for (const m of rows) {
-    // The edge function's "reduce": a positive quantity lowers stock. A sale
-    // recorded as legacy_delta -1 therefore sends +1.
-    const res = await adjustShopifyInventory(m.product_id, m.size, -m.legacy_delta);
+    // A full recount sets Shopify to the counted number (a stale count here
+    // cannot push Shopify wrong). Everything else is a change: adjust's
+    // positive quantity lowers stock, so a sale (legacy_delta -1) sends +1.
+    // Retries carry no exact target and are sent as the recorded change.
+    const target = exact[sizeKey(m.product_id, m.size)];
+    const res = target !== undefined
+      ? await setShopifyStock(m.product_id, m.size, target, { source: "stock-room" })
+      : await adjustShopifyInventory(m.product_id, m.size, -m.legacy_delta, { source: "stock-room" });
     if (res.ok) {
       sent.push(m.id);
     } else {
@@ -104,13 +122,12 @@ export async function readShopifyStock(productId) {
 }
 
 /**
- * Shopify → database: the pull InventoryDashboard.jsx (fetchAllLxrtsInventory)
- * runs on every load. For each LXRTS design, read Shopify's per-size stock and
- * write any size that differs into product_variants.inventory, so Shopify's
- * count wins. It only READS Shopify — nothing is sent to the store.
+ * Shopify → database, read from the page. The edge function itself copies
+ * Shopify's per-size counts into product_variants on every read, so this only
+ * reads, counts what differed from the catalogue on screen, and reports which
+ * designs to reload. It never writes the database.
  *
- * Runs only where sending runs (production with sync switched on), so a local
- * or staging copy never overwrites its stock from the live store.
+ * Runs only where sending runs (production with sync switched on).
  *
  * @param products  rows with id, name, sync_enabled
  * @param variants  product_variants rows with id, product_id, size, inventory
@@ -133,19 +150,51 @@ export async function pullShopifyStock(products, variants, { concurrency = 6 } =
       next += 1;
       const live = await fetchShopifyInventory(p.id);
       if (!live) { failed.push(p.name || p.id); continue; }
-      for (const v of byProduct[p.id] || []) {
-        const qty = live[v.size];
-        if (qty === undefined || qty === null || Number(qty) === Number(v.inventory)) continue;
-        const { error } = await supabase.from("product_variants").update({ inventory: qty }).eq("id", v.id);
-        if (error) {
-          failed.push(`${p.name || p.id} (${v.size})`);
-        } else {
-          updated += 1;
-          changed.add(p.id);
-        }
-      }
+      const n = countDifferences(byProduct[p.id], live);
+      if (n) { updated += n; changed.add(p.id); }
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, lxrts.length) }, worker));
   return { checked: lxrts.length, updated, failed, changedProductIds: [...changed], at: new Date().toISOString() };
+}
+
+/**
+ * Sizes whose stored count differs from Shopify's. `live` lists sizes in stock
+ * only, so a size missing from it is 0 on Shopify. A size stored in more than
+ * one row (a known data problem) is compared as one total, the way Shopify's
+ * reply sums it, so duplicates are not reported as changes.
+ */
+export function countDifferences(rows, live) {
+  const stored = {};
+  for (const v of rows || []) stored[v.size] = (stored[v.size] || 0) + (Number(v.inventory) || 0);
+  let n = 0;
+  for (const [size, total] of Object.entries(stored)) {
+    if (Number(live?.[size] ?? 0) !== total) n += 1;
+  }
+  return n;
+}
+
+/** The every-minute job counts as healthy when its last good run is under 5 minutes old. */
+export function jobIsHealthy(state, now = Date.now()) {
+  return !!state?.last_ok_at && now - new Date(state.last_ok_at).getTime() < 5 * 60000;
+}
+
+/**
+ * Keep the screen in step with Shopify. While the every-minute job
+ * (shopify-inventory-v2) is healthy it already keeps product_variants current,
+ * so the page only asks which designs it changed since `since`. If the job is
+ * not running, fall back to reading every LXRTS design from Shopify.
+ */
+export async function syncWithShopify(products, variants, since) {
+  if (!SHOPIFY_SYNC_ON) return null;
+  const state = await loadShopifySyncState();
+  if (!jobIsHealthy(state)) return pullShopifyStock(products, variants);
+  let query = supabase.from("shopify_stock_log").select("product_id").eq("action", "sync");
+  if (since) query = query.gt("created_at", since);
+  const { data, error } = await query.limit(1000);
+  const ids = [...new Set((data || []).map((r) => r.product_id).filter(Boolean))];
+  return {
+    checked: state.last_checked || 0, updated: error ? 0 : (data || []).length, failed: [],
+    changedProductIds: ids, at: state.last_ok_at, viaJob: true,
+  };
 }

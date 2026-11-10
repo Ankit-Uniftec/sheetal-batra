@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
-import config from "../../config/config";
+import { fetchShopifyInventory, setShopifyStock } from "../../utils/shopifyInventory";
 import "./InventoryDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
 import { usePopup } from "../../components/Popup";
@@ -278,79 +278,27 @@ export default function InventoryDashboard() {
     setLxrtsSyncLoading(true);
     const inventoryMap = {};
 
-    // Fetch all LXRTS products in parallel
-    const results = await Promise.allSettled(
-      lxrtsProducts.map(async (product) => {
-        try {
-          const response = await fetch(
-            `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: config.SUPABASE_KEY,
-                Authorization: `Bearer ${config.SUPABASE_KEY}`,
-              },
-              body: JSON.stringify({
-                action: "fetch",
-                product_id: product.id,
-              }),
-            }
-          );
-
-          const result = await response.json();
-
-          if (result.success && result.inventory) {
-            inventoryMap[product.id] = result.inventory;
-
-            // Update product_variants in Supabase with fresh Shopify data
-            const { data: existingVariants } = await supabase
-              .from("product_variants")
-              .select("id, size, inventory")
-              .eq("product_id", product.id);
-
-            for (const variant of existingVariants || []) {
-              const shopifyQty = result.inventory[variant.size];
-              if (shopifyQty !== undefined && shopifyQty !== variant.inventory) {
-                await supabase
-                  .from("product_variants")
-                  .update({ inventory: shopifyQty })
-                  .eq("id", variant.id);
-              }
-            }
-          } else {
-            // Fallback: read from product_variants if Shopify fails
-            const { data: variants } = await supabase
-              .from("product_variants")
-              .select("size, inventory")
-              .eq("product_id", product.id);
-
-            if (variants) {
-              const map = {};
-              variants.forEach((v) => {
-                map[v.size] = v.inventory || 0;
-              });
-              inventoryMap[product.id] = map;
-            }
-          }
-        } catch (err) {
-          console.error(`Error syncing ${product.name}:`, err);
-          // Fallback to database
-          const { data: variants } = await supabase
-            .from("product_variants")
-            .select("size, inventory")
-            .eq("product_id", product.id);
-
-          if (variants) {
-            const map = {};
-            variants.forEach((v) => {
-              map[v.size] = v.inventory || 0;
-            });
-            inventoryMap[product.id] = map;
-          }
-        }
-      })
-    );
+    // Read each LXRTS design from Shopify. The edge function also copies
+    // Shopify's numbers into product_variants. A design Shopify could not
+    // answer for keeps its database number (null means unknown, not zero).
+    // Six at a time, so a large catalogue does not flood Shopify.
+    let next = 0;
+    const worker = async () => {
+      while (next < lxrtsProducts.length) {
+        const product = lxrtsProducts[next];
+        next += 1;
+        const live = await fetchShopifyInventory(product.id);
+        if (!live) continue;
+        const { data: variants } = await supabase
+          .from("product_variants")
+          .select("size, inventory")
+          .eq("product_id", product.id);
+        const map = {};
+        (variants || []).forEach((v) => { map[v.size] = v.inventory || 0; });
+        inventoryMap[product.id] = map;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, lxrtsProducts.length) }, worker));
 
     // Merge, don't replace. fetchVariantInventory has already populated this
     // from product_variants; a product whose Shopify call failed keeps its
@@ -464,78 +412,28 @@ export default function InventoryDashboard() {
     setSavingVariant(true);
 
     try {
-      // 1. Update product_variants in Supabase
-      const { data: variant, error: fetchError } = await supabase
-        .from("product_variants")
-        .select("id, inventory")
-        .eq("product_id", productId)
-        .eq("size", size)
-        .limit(1)
-        .maybeSingle();
-
-      if (fetchError) {
-        throw new Error(`Failed to find variant: ${fetchError.message}`);
+      // Set the exact number on Shopify. The function reads Shopify's current
+      // count, changes it to newQty, and writes newQty into product_variants,
+      // so a stale number on this screen can never push Shopify wrong.
+      const sync = await setShopifyStock(productId, size, newQty, { source: "inventory-dashboard" });
+      if (!sync.ok) {
+        throw new Error(`Shopify did not accept the change: ${sync.error}`);
       }
 
-      if (!variant) {
-        throw new Error(`No variant found for size ${size}`);
+      if (sync.dry_run) {
+        showPopup({
+          title: "Test run",
+          message: `Test run on this computer: Shopify would go from ${sync.before} to ${sync.after}. Nothing was saved.`,
+          type: "info",
+          confirmText: "Ok",
+        });
+        setEditingVariant(null);
+        setEditVariantValue("");
+        setSavingVariant(false);
+        return;
       }
 
-      const { error: updateError } = await supabase
-        .from("product_variants")
-        .update({ inventory: newQty })
-        .eq("id", variant.id);
-
-      if (updateError) {
-        throw new Error(`Failed to update Supabase: ${updateError.message}`);
-      }
-
-      // 2. Sync to Shopify — use "reduce" with delta (negative qty = increase)
-      const oldQty = variant.inventory || 0;
-      const delta = oldQty - newQty; // positive = reduce, negative = increase on Shopify
-
-      if (delta !== 0) {
-        try {
-          const response = await fetch(
-            `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: config.SUPABASE_KEY,
-                Authorization: `Bearer ${config.SUPABASE_KEY}`,
-              },
-              body: JSON.stringify({
-                action: "reduce",
-                product_id: productId,
-                size: size,
-                quantity: delta,
-              }),
-            }
-          );
-
-          const result = await response.json();
-          if (!result.success) {
-            console.error("Shopify sync failed:", result.error);
-            showPopup({
-              title: "Partial Update",
-              message: "Supabase updated but Shopify sync failed. Inventory may be out of sync.",
-              type: "warning",
-              confirmText: "Ok",
-            });
-          }
-        } catch (shopifyErr) {
-          console.error("Shopify sync error:", shopifyErr);
-          showPopup({
-            title: "Partial Update",
-            message: "Supabase updated but Shopify sync failed. Inventory may be out of sync.",
-            type: "warning",
-            confirmText: "Ok",
-          });
-        }
-      }
-
-      // 3. Update local state
+      // Update local state
       setVariantInventory((prev) => ({
         ...prev,
         [productId]: {
@@ -546,7 +444,7 @@ export default function InventoryDashboard() {
 
       showPopup({
         title: "Updated!",
-        message: `Size ${size} inventory updated to ${newQty}.`,
+        message: `Size ${size} updated to ${newQty} on Shopify and here.`,
         type: "success",
         confirmText: "Ok",
       });

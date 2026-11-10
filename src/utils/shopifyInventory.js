@@ -1,139 +1,151 @@
 import config from "../config/config";
+import { supabase } from "../lib/supabaseClient";
 
 // ============================================================
-// Thin wrapper over the `shopify-inventory` edge function.
+// LXRTS stock on Shopify — the ONE place the app talks to it.
 //
-// That function is DEPLOYED ONLY — its source is not in this repo (see
-// supabase/functions/, which has no shopify-inventory directory). Its contract,
-// as used by every call site in the app, is exactly two actions:
+// Every call goes to the `shopify-inventory-v2` edge function
+// (supabase/functions/shopify-inventory-v2), signed in as the current user.
+// Shopify holds the true LXRTS count; product_variants.inventory is the app's
+// copy, and the function writes Shopify's new number back after every change.
 //
-//   { action: "fetch",  product_id }                → { success, inventory: { "S": 3, … } }
-//   { action: "reduce", product_id, size, quantity } → { success }
+//   fetchShopifyInventory(productId)        read Shopify, refresh the app's copy
+//   changeShopifyStock(productId, size, change, { source, orderNo })
+//                                           a real movement: + adds, − removes
+//   setShopifyStock(productId, size, qty, { source })
+//                                           a manual correction to an exact number
+//   retryShopifyChange(logId)               send a failed change again
+//   loadShopifyStockIssues()                failed / unconfirmed changes
 //
-// Two things about that contract shape everything built on it:
+// SAFETY: on the local dev server every call is a DRY RUN — the function reads
+// Shopify and returns what it would do, but writes nothing to Shopify or the
+// database. Only the production build (Vercel) sends real changes. Every
+// local copy of this app is connected to the LIVE Shopify store.
 //
-//   1. `reduce` is a RELATIVE DELTA, not an absolute set — a positive quantity
-//      reduces stock, a negative one increases it. There is no "set to N"
-//      action, so every caller has to read the current value first and compute
-//      the difference.
-//   2. Sizes are matched by their NAME STRING. `shopify_variant_id` is stored
-//      on product_variants but never read at runtime. A size whose name doesn't
-//      match Shopify's variant exactly simply never syncs.
-//
-// `product_id` is the SUPABASE products.id (a UUID) — the edge function looks
-// up products.shopify_product_id itself. Passing a Shopify GID here will fail.
-//
-// These helpers are used by the Add/Edit product form. The 13 pre-existing call
-// sites (order placement, cancellation, the dashboards' variant editors)
-// deliberately still inline their own fetch — they work, and rewriting
-// order-placement inventory logic carries far more risk than it removes.
+// `productId` is always the Supabase products.id (a UUID), never a Shopify id.
 // ============================================================
+
+export const SHOPIFY_DRY_RUN = process.env.NODE_ENV !== "production";
 
 /**
  * Put a Shopify id into the GID form this database stores.
  *
- * THE STORED SHAPE IS THE FULL GID — verified against the live catalogue, not
- * assumed: 120 of 121 `products.shopify_product_id` and 1000 of 1000
+ * THE STORED SHAPE IS THE FULL GID — verified against the live catalogue:
+ * 120 of 121 `products.shopify_product_id` and 1000 of 1000
  * `product_variants.shopify_variant_id` rows are `gid://shopify/<Type>/<id>`.
- * (The single exception is the literal string "test" on SKU-1071 — junk, not a
- * bare id.) The deployed `shopify-inventory` edge function therefore consumes
- * GIDs today, so anything written here must match or that product stops syncing.
+ * Shopify's URL bar shows only the number while its API and CSV exports hand
+ * out the GID, so both are accepted; one shape is stored.
  *
- * Shopify's URL bar shows only the number while its API and CSV exports hand out
- * the GID, so whichever a user copies is a coin flip. Both are accepted; one
- * shape is stored.
- *
- * Idempotent: a value that is already a GID is returned untouched, so re-saving
- * a product can never produce `gid://shopify/Product/gid://shopify/Product/123`.
- * Mirrors the defensive pattern in supabase/functions/shopify-order-sync
- * (index.ts:1000), which likewise accepts either form rather than assuming one.
- *
- * @param   {string} value  A GID, a bare numeric id, or anything pasted.
- * @param   {"Product"|"ProductVariant"} type  Which GID to build from a bare id.
- * @returns {string} the GID form, or the trimmed input unchanged when it is
- *          neither a GID nor a bare number — never throws, so a typo reaches the
- *          DB as typed rather than being silently blanked or mangled into a
- *          plausible-looking GID that points at nothing.
+ * Idempotent: a GID is returned untouched. A bare number becomes a GID of
+ * `type`. Anything else comes back trimmed and unchanged — never blanked.
  */
 export function normalizeShopifyId(value, type = "Product") {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
-  // Already a GID of any type — leave it exactly as-is. Rebuilding it from the
-  // trailing digits would silently retype a ProductVariant GID as a Product one.
   if (/^gid:\/\/shopify\/[A-Za-z]+\/\d+$/.test(raw)) return raw;
-  // A bare numeric id is the only other thing we can safely interpret.
   if (/^\d+$/.test(raw)) return `gid://shopify/${type}/${raw}`;
   return raw;
 }
 
-const endpoint = () => `${config.SUPABASE_URL}/functions/v1/shopify-inventory`;
+const endpoint = () => `${config.SUPABASE_URL}/functions/v1/shopify-inventory-v2`;
 
-const headers = () => ({
-  "Content-Type": "application/json",
-  apikey: config.SUPABASE_KEY,
-  Authorization: `Bearer ${config.SUPABASE_KEY}`,
-});
-
-/**
- * Live per-size stock for one product, straight from Shopify.
- *
- * @param   {string} productId  Supabase products.id (UUID), not a Shopify GID.
- * @returns {Promise<Object|null>} `{ "S": 3, "M": 0 }`, or **null** when Shopify
- *          could not be reached or returned a failure.
- *
- * NULL MEANS "UNKNOWN", NEVER "ZERO". Treating an unreachable Shopify as empty
- * stock would zero out a real catalogue — callers must keep their existing
- * numbers and say the value is unverified instead.
- */
-export async function fetchShopifyInventory(productId) {
+async function call(body) {
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return { ok: false, error: "Please sign in again." };
     const response = await fetch(endpoint(), {
       method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ action: "fetch", product_id: productId }),
+      headers: {
+        "Content-Type": "application/json",
+        apikey: config.SUPABASE_KEY,
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(SHOPIFY_DRY_RUN && body.action !== "retry" ? { ...body, dry_run: true } : body),
     });
-    const result = await response.json();
-    if (result?.success && result.inventory) return result.inventory;
-    console.error("Shopify inventory fetch failed:", result?.error);
-    return null;
+    const result = await response.json().catch(() => ({}));
+    if (result?.success) return { ok: true, ...result };
+    const err = result?.error;
+    return { ok: false, ...result, error: typeof err === "string" ? err : JSON.stringify(err || "Shopify could not be reached.") };
   } catch (err) {
-    console.error("Shopify inventory fetch error:", err);
-    return null;
+    return { ok: false, error: err?.message || String(err) };
   }
 }
 
 /**
- * Move one size's Shopify stock by a delta.
+ * Live per-size stock for one design, straight from Shopify. Also refreshes
+ * the app's copy (product_variants) on the way.
  *
- * @param {string} productId  Supabase products.id (UUID).
- * @param {string} size       Size name — must match Shopify's variant exactly.
- * @param {number} delta      Positive REDUCES stock, negative INCREASES it.
- *                            (The edge function only exposes "reduce"; a
- *                            negative quantity is how the whole app raises
- *                            stock — see restoreOrderInventory.js.)
- * @returns {Promise<{ ok: boolean, error?: string }>}
+ * @returns {Promise<Object|null>} `{ "S": 3, "M": 1 }` (sizes in stock), or
+ *          **null** when Shopify could not be read.
  *
- * To land on an absolute target, the caller computes
- * `delta = currentShopifyQty - desiredQty` — reading `currentShopifyQty` as
- * late as possible, since a sale in between makes the delta wrong.
+ * NULL MEANS "UNKNOWN", NEVER "ZERO". Treating an unreachable Shopify as empty
+ * stock would zero out a real catalogue — keep the existing numbers instead.
  */
-export async function adjustShopifyInventory(productId, size, delta) {
-  if (!delta) return { ok: true };   // nothing to move
-  try {
-    const response = await fetch(endpoint(), {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        action: "reduce",
-        product_id: productId,
-        size,
-        quantity: delta,
-      }),
-    });
-    const result = await response.json();
-    if (result?.success) return { ok: true };
-    return { ok: false, error: result?.error || "Shopify rejected the update." };
-  } catch (err) {
-    return { ok: false, error: err.message || String(err) };
-  }
+export async function fetchShopifyInventory(productId) {
+  const r = await call({ action: "fetch", product_id: productId });
+  if (r.ok && r.inventory) return r.inventory;
+  console.error("Shopify inventory fetch failed:", r.error);
+  return null;
+}
+
+/**
+ * A real movement of one size on Shopify (+ adds, − removes): sales,
+ * cancellations, receiving. The function reads Shopify's current number and
+ * applies the change to it, so a sale on the website at the same moment is
+ * never lost.
+ *
+ * @returns {Promise<{ ok: boolean, error?: string, before?: number, after?: number, dry_run?: boolean }>}
+ */
+export async function changeShopifyStock(productId, size, change, { source, orderNo } = {}) {
+  if (!change) return { ok: true };
+  return call({ action: "adjust", product_id: productId, size, change, source: source || "app", order_no: orderNo || undefined });
+}
+
+/**
+ * Set one size on Shopify to an exact number (manual corrections). Shopify
+ * ends at `quantity` whatever the app showed before.
+ */
+export async function setShopifyStock(productId, size, quantity, { source } = {}) {
+  return call({ action: "set", product_id: productId, size, quantity: Number(quantity), source: source || "app" });
+}
+
+/** Send a failed change again (inventory / admin / management roles). */
+export async function retryShopifyChange(logId) {
+  return call({ action: "retry", log_id: logId });
+}
+
+/**
+ * The old call shape, kept for the Stock Room and the Add/Edit product form:
+ * a POSITIVE delta REDUCES stock, a negative one increases it.
+ */
+export async function adjustShopifyInventory(productId, size, delta, opts = {}) {
+  if (!delta) return { ok: true };
+  const r = await changeShopifyStock(productId, size, -delta, opts);
+  return r.ok ? { ok: true } : { ok: false, error: r.error || "Shopify rejected the update." };
+}
+
+/**
+ * Changes Shopify refused, or did not confirm, that nobody has retried yet.
+ * Newest first.
+ */
+export async function loadShopifyStockIssues(limit = 200) {
+  const { data, error } = await supabase
+    .from("shopify_stock_log")
+    .select("id, created_at, action, source, order_no, product_id, size, requested_change, requested_quantity, before_qty, delta, status, retryable, error, user_email")
+    .in("status", ["failed", "unknown"])
+    .is("retried_at", null)
+    // Stock Room changes have their own list and retry ("Shopify changes not
+    // sent"); listing them here too could send the same change twice.
+    .or("source.is.null,source.neq.stock-room")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+/** The scheduled sync's last run (null before the tables exist). */
+export async function loadShopifySyncState() {
+  const { data, error } = await supabase.from("shopify_stock_sync_state").select("*").eq("id", 1).maybeSingle();
+  if (error) return null;
+  return data;
 }
