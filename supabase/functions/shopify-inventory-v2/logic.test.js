@@ -69,6 +69,26 @@ t("planUpdates writes only differences, reports unlinked sizes", () => {
   assert.strictEqual(p.updates[1].to, null);
 });
 
+t("planUpdates puts Shopify's number on one row when a size is stored twice", () => {
+  const rows = [
+    { id: "a1", size: "S", inventory: 4, price: 12500, shopify_variant_id: "" },
+    { id: "a2", size: "S", inventory: 1, price: 12500, shopify_variant_id: "11", shopify_inventory_item_id: "gid://shopify/InventoryItem/111" },
+    { id: "a3", size: "S ", inventory: 2, price: 12500, shopify_variant_id: "11", shopify_inventory_item_id: "gid://shopify/InventoryItem/111" },
+  ];
+  const p = L.planUpdates(rows, L.readingsFromProduct(product, ""));
+  const byId = Object.fromEntries(p.updates.map((u) => [u.id, u.fields.inventory]));
+  // a3 (linked, most stock) keeps Shopify's 3; the other copies go to 0
+  assert.deepStrictEqual(byId, { a3: 3, a1: 0, a2: 0 });
+  const after = rows.map((r) => ({ size: r.size.trim(), inventory: byId[r.id] ?? r.inventory }));
+  assert.deepStrictEqual(L.inventoryMap(after), { S: 3 });
+});
+
+t("canonicalRow prefers linked, then most stock, then id", () => {
+  assert.strictEqual(L.canonicalRow([{ id: "x", inventory: 9, shopify_variant_id: null }, { id: "y", inventory: 0, shopify_variant_id: "5" }]).id, "y");
+  assert.strictEqual(L.canonicalRow([{ id: "b", inventory: 0, shopify_variant_id: "5" }, { id: "a", inventory: 0, shopify_variant_id: "5" }]).id, "a");
+  assert.strictEqual(L.canonicalRow([]), null);
+});
+
 t("inventoryMap keeps sizes in stock only", () => {
   assert.deepStrictEqual(L.inventoryMap([{ size: "S", inventory: 2 }, { size: "M", inventory: 0 }, { size: "S", inventory: 1 }]), { S: 3 });
 });

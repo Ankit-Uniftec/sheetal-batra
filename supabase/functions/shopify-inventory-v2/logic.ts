@@ -112,22 +112,47 @@ export function readingsFromProduct(product: any, configuredLocation: string) {
  * @returns updates to write (only rows that differ), sizes the app has but
  *          Shopify cannot vouch for, and readings that failed.
  */
+/**
+ * The ONE app row that holds a size's stock when the size is stored more than
+ * once (358 sizes are). Linked to Shopify first, then the most stock, then id,
+ * so the sync and every write pick the same row. The others are kept at 0, or
+ * the app would add them up and show double Shopify's number.
+ */
+export function canonicalRow<T extends { id: string; inventory?: unknown; shopify_variant_id?: unknown }>(rows: T[]): T | null {
+  const sorted = [...(rows || [])].sort((a, b) =>
+    (toGid(b.shopify_variant_id, "ProductVariant") ? 1 : 0) - (toGid(a.shopify_variant_id, "ProductVariant") ? 1 : 0)
+    || (Number(b.inventory) || 0) - (Number(a.inventory) || 0)
+    || String(a.id).localeCompare(String(b.id)));
+  return sorted[0] || null;
+}
+
+const sizeKey = (s: unknown) => String(s ?? "").trim().toLowerCase();
+
 export function planUpdates(rows: any[], readings: ReturnType<typeof readingsFromProduct>) {
   const byVariant = new Map(readings.map((r) => [r.variantId, r]));
   const updates: Array<{ id: string; fields: Record<string, unknown>; size: string; from: number; to: number | null }> = [];
   const unlinked: string[] = [];
   const failed: string[] = [];
+  const groups = new Map<string, any[]>();
   for (const row of rows || []) {
-    const gid = toGid(row.shopify_variant_id, "ProductVariant");
-    const r = gid ? byVariant.get(gid) : undefined;
-    if (!r) { unlinked.push(row.size); continue; }
-    if (r.error || r.available === null) { failed.push(`${row.size}: ${r.error || "no quantity"}`); continue; }
-    const fields: Record<string, unknown> = {};
-    if (Number(row.inventory) !== r.available) fields.inventory = r.available;
-    if (r.price !== null && Number(row.price) !== r.price) fields.price = r.price;
-    if (r.inventoryItemId && row.shopify_inventory_item_id !== r.inventoryItemId) fields.shopify_inventory_item_id = r.inventoryItemId;
-    if (Object.keys(fields).length) {
-      updates.push({ id: row.id, fields, size: row.size, from: Number(row.inventory) || 0, to: fields.inventory === undefined ? null : r.available });
+    const k = sizeKey(row.size);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(row);
+  }
+  for (const group of groups.values()) {
+    const keep = canonicalRow(group)!;
+    const r = byVariant.get(toGid(keep.shopify_variant_id, "ProductVariant"));
+    if (!r) { unlinked.push(keep.size); continue; }
+    if (r.error || r.available === null) { failed.push(`${keep.size}: ${r.error || "no quantity"}`); continue; }
+    for (const row of group) {
+      const target = row === keep ? r.available : 0; // Shopify's number lives on one row only
+      const fields: Record<string, unknown> = {};
+      if (Number(row.inventory) !== target) fields.inventory = target;
+      if (r.price !== null && row.price !== undefined && Number(row.price) !== r.price) fields.price = r.price;
+      if (row === keep && r.inventoryItemId && row.shopify_inventory_item_id !== r.inventoryItemId) fields.shopify_inventory_item_id = r.inventoryItemId;
+      if (Object.keys(fields).length) {
+        updates.push({ id: row.id, fields, size: row.size, from: Number(row.inventory) || 0, to: fields.inventory === undefined ? null : target });
+      }
     }
   }
   return { updates, unlinked, failed };

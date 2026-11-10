@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
-  chunk, deltaFor, inventoryMap, isStale, nextBatch, pickLevel, planUpdates,
+  canonicalRow, chunk, deltaFor, inventoryMap, isStale, nextBatch, pickLevel, planUpdates,
   PRODUCTS_PER_QUERY, readingsFromProduct, ROTATION_BATCH, SET_ROLES,
   SHOPIFY_API_VERSION, soldProductIds, toGid,
 } from "./logic.ts";
@@ -180,7 +180,7 @@ async function refreshProducts(productIds: string[], dryRun = false) {
       const linkedIds = mine.filter((r: any) => !touched.has(r.id) && !plan.unlinked.includes(r.size)).map((r: any) => r.id);
       if (linkedIds.length) await supabase.from("product_variants").update({ last_synced_at: now }).in("id", linkedIds);
     }
-    results[productId] = { updated, unlinked: plan.unlinked, failed: plan.failed, changes: plan.updates.filter((u) => u.to !== null).map((u) => ({ size: u.size, from: u.from, to: u.to })) };
+    results[productId] = { updated, unlinked: plan.unlinked, failed: plan.failed, changes: plan.updates.filter((u) => u.to !== null).map((u) => ({ id: u.id, size: u.size, from: u.from, to: u.to })) };
   }
   return { results, stoppedEarly };
 }
@@ -212,9 +212,11 @@ async function write(input: WriteInput) {
   const { action, productId, size, dryRun } = input;
   if (!productId || !size) return { success: false, error: "product_id and size are required." };
 
-  const { data: variant } = await supabase.from("product_variants")
-    .select("id, inventory, shopify_variant_id").eq("product_id", productId).eq("size", size)
-    .order("inventory", { ascending: false }).limit(1).maybeSingle();
+  // A size can be stored more than once: use the same row the sync uses.
+  const { data: sameSize } = await supabase.from("product_variants")
+    .select("id, inventory, shopify_variant_id").eq("product_id", productId).eq("size", size);
+  const variant = canonicalRow(sameSize || []);
+  const otherIds = (sameSize || []).filter((r: any) => r.id !== variant?.id && Number(r.inventory)).map((r: any) => r.id);
   const variantGid = toGid(variant?.shopify_variant_id, "ProductVariant");
 
   const base = {
@@ -253,6 +255,7 @@ async function write(input: WriteInput) {
     }
     if (d.delta === 0) {
       await supabase.from("product_variants").update({ inventory: read.available, shopify_inventory_item_id: read.inventoryItemId, last_synced_at: new Date().toISOString() }).eq("id", variant.id);
+      if (otherIds.length) await supabase.from("product_variants").update({ inventory: 0 }).in("id", otherIds);
       await logUpdate(logId, { status: "sent", before_qty: read.available, delta: 0, after_qty: read.available, location_id: read.locationId });
       return { success: true, before: read.available, delta: 0, after: read.available, log_id: logId };
     }
@@ -285,6 +288,7 @@ async function write(input: WriteInput) {
     const userErrors = r.data?.inventoryAdjustQuantities?.userErrors || [];
     if (!r.errors?.length && !userErrors.length && r.data?.inventoryAdjustQuantities) {
       await supabase.from("product_variants").update({ inventory: after, shopify_inventory_item_id: read.inventoryItemId, last_synced_at: new Date().toISOString() }).eq("id", variant.id);
+      if (otherIds.length) await supabase.from("product_variants").update({ inventory: 0 }).in("id", otherIds);
       await logUpdate(logId, { status: "sent", before_qty: read.available, delta: d.delta, after_qty: after, location_id: read.locationId, error: null });
       return { success: true, before: read.available, delta: d.delta, after, log_id: logId };
     }
@@ -408,12 +412,12 @@ Deno.serve(async (req) => {
       if (!body.product_id) return json({ error: "product_id is required" }, 400);
       const { results } = await refreshProducts([body.product_id], dryRun);
       const r = results[body.product_id];
-      const { data: rows } = await supabase.from("product_variants").select("size, inventory").eq("product_id", body.product_id);
+      const { data: rows } = await supabase.from("product_variants").select("id, size, inventory").eq("product_id", body.product_id);
       if (r?.failed?.includes("Design has no valid Shopify product id")) return json({ error: "Product not found or not a sync product" }, 400);
       // A dry run wrote nothing, so lay Shopify's numbers over the stored ones.
       const shown = dryRun
         ? (rows || []).map((row: any) => {
-          const c = (r?.changes as any[] || []).find((x) => x.size === row.size);
+          const c = (r?.changes as any[] || []).find((x) => x.id === row.id);
           return c ? { ...row, inventory: c.to } : row;
         })
         : rows || [];
