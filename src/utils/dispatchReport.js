@@ -16,6 +16,7 @@ import { supabase } from "../lib/supabaseClient";
 import { fetchAllRowsParallel, runLimited } from "./fetchAllRowsParallel";
 import { shipmentBalances, orderNetTotal } from "./shipmentBalance";
 import { getOrderChannelLabel } from "./barcodeService";
+import { shippingAddressOf } from "./shippingAddress";
 
 const ORDER_COLUMNS = [
   "id", "order_no", "created_at", "delivery_date", "items", "status",
@@ -52,6 +53,19 @@ export function paymentModeOf(order) {
 
 const addressOf = (o) =>
   [o?.delivery_address, o?.delivery_city, o?.delivery_state].filter((x) => x && String(x).trim()).join(", ");
+
+// Store-delivery orders carry no delivery_address; the parcel goes to the
+// store, so the store's own address and pincode are printed (Release 34 —
+// the sheet showed "—" over "Delhi Store" and an empty pincode).
+const PIN_AT_END = /\b(\d{6})\s*$/;
+export function shipToOf(o) {
+  const ship = shippingAddressOf(o);
+  if (ship.store) {
+    const m = ship.address.match(PIN_AT_END);
+    return { address: m ? ship.address.replace(PIN_AT_END, "").replace(/[\s,]+$/, "") : ship.address, pincode: m ? m[1] : "", store: ship.store };
+  }
+  return { address: addressOf(o), pincode: o?.delivery_pincode || "", store: null };
+}
 
 /**
  * One row per dispatched box. Pure — everything it needs is passed in.
@@ -122,8 +136,9 @@ export function buildDispatchRows({ dispatched = [], orders = [], allShipments =
         dispatchedAt: s.dispatched_at || s.created_at || null,
         name,
         phone: order.delivery_phone || "",
-        address: addressOf(order),
-        pincode: order.delivery_pincode || "",
+        address: shipToOf(order).address,
+        pincode: shipToOf(order).pincode,
+        store: shipToOf(order).store,
         modeOfDelivery: order.mode_of_delivery || "",
         boxValue,
         toCollect,
