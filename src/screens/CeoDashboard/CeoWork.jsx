@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import config from "../../config/config";
+import { fetchAllRows } from "../../utils/fetchAllRows";
+import { setShopifyStock } from "../../utils/shopifyInventory";
 import formatDate from "../../utils/formatDate";
 import downloadCsv from "../../utils/downloadCsv";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -608,8 +609,6 @@ export function OrdersPage({ ctx }) {
 
 // ------------------------------------------------------------ STOCK
 const SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
-const functionsUrl = () => `${config.SUPABASE_URL}/functions/v1/shopify-inventory`;
-const functionHeaders = () => ({ "Content-Type": "application/json", apikey: config.SUPABASE_KEY, Authorization: `Bearer ${config.SUPABASE_KEY}` });
 
 export function StockPage({ ctx }) {
   const { products, setProducts, variants, setVariants, open, showPopup, consignment } = ctx;
@@ -630,21 +629,16 @@ export function StockPage({ ctx }) {
     let dead = false;
     (async () => {
       setSyncing(true);
+      // The every-minute Shopify sync keeps product_variants current: read the
+      // app's copy in one paged query, not one Shopify call per design.
+      const ids = new Set(synced.map((p) => p.id));
+      const { data } = await fetchAllRows("product_variants", (q) => q.select("id, product_id, size, inventory").order("id"));
       const map = {};
-      const fromDb = async (product) => {
-        const { data } = await supabase.from("product_variants").select("size, inventory").eq("product_id", product.id);
-        if (data) { const m = {}; data.forEach((v) => { m[v.size] = v.inventory || 0; }); map[product.id] = m; }
-      };
-      await Promise.allSettled(synced.map(async (product) => {
-        try {
-          const res = await fetch(functionsUrl(), { method: "POST", headers: functionHeaders(), body: JSON.stringify({ action: "fetch", product_id: product.id }) });
-          const json = await res.json();
-          if (json.success && json.inventory) map[product.id] = json.inventory;
-          else await fromDb(product);
-        } catch {
-          await fromDb(product);
-        }
-      }));
+      (data || []).forEach((v) => {
+        if (!ids.has(v.product_id)) return;
+        if (!map[v.product_id]) map[v.product_id] = {};
+        map[v.product_id][v.size] = v.inventory || 0;
+      });
       if (!dead) { setVariants(map); setSyncing(false); }
     })();
     return () => { dead = true; };
@@ -696,19 +690,14 @@ export function StockPage({ ctx }) {
     if (draft === "" || Number.isNaN(qty) || qty < 0) return;
     setSaving(true);
     try {
-      const old = variants[id]?.[size] || 0;
-      const { error } = await supabase.from("product_variants").update({ inventory: qty }).eq("product_id", id).eq("size", size);
-      if (error) throw new Error("Failed to update");
-      const delta = old - qty;
-      if (delta !== 0) {
-        try {
-          const res = await fetch(functionsUrl(), { method: "POST", headers: functionHeaders(), body: JSON.stringify({ action: "reduce", product_id: id, size, quantity: delta }) });
-          const json = await res.json();
-          if (!json.success) console.error("Shopify sync failed:", json.error);
-        } catch (e) { console.error("Shopify sync error:", e); }
-      }
-      setVariants((prev) => ({ ...prev, [id]: { ...prev[id], [size]: qty } }));
-    } catch (e) { console.error("Variant update error:", e); }
+      // Exact number on Shopify; the function writes it into product_variants.
+      const sync = await setShopifyStock(id, size, qty, { source: "ceo-dashboard" });
+      if (!sync.ok) throw new Error(`Shopify did not accept the change: ${sync.error}`);
+      if (!sync.dry_run) setVariants((prev) => ({ ...prev, [id]: { ...prev[id], [size]: qty } }));
+    } catch (e) {
+      console.error("Variant update error:", e);
+      showPopup({ title: "Not saved", message: e.message || "Shopify did not accept the change.", type: "error" });
+    }
     setEditing(null);
     setSaving(false);
   };

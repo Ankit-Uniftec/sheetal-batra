@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Topline, ProductCell, Badge } from "./StockRoomUi";
 import { formatUnits, formatDay, sizeLabel, TYPE_LABELS, REASON_LABELS, productType } from "./stockRoomModel";
 import { retryShopify, SHOPIFY_SYNC_ON } from "./stockRoomShopify";
+import { loadShopifyStockIssues, loadShopifySyncState, retryShopifyChange } from "../../utils/shopifyInventory";
 
 // Findings in the existing product data. Each section names the rows so they
 // can be corrected: most in the product editor (click the row), an impossible
@@ -165,6 +166,86 @@ function ShopifyUnsent({ view, canWrite, onShopifyRetried }) {
   );
 }
 
+const SOURCE_LABEL = {
+  "order-placed": "Order placed", "order-cancelled": "Order cancelled", "inventory-dashboard": "Inventory dashboard",
+  "admin-dashboard": "Admin dashboard", "ceo-dashboard": "CEO dashboard", app: "App",
+};
+const minutesAgo = (iso) => {
+  if (!iso) return null;
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  return m < 1 ? "just now" : m === 1 ? "1 minute ago" : m < 120 ? `${m} minutes ago` : `${Math.round(m / 60)} hours ago`;
+};
+
+/**
+ * The every-minute Shopify stock sync and every LXRTS change Shopify refused
+ * or did not confirm, from any screen except the Stock Room (which has its own
+ * list above). Renders nothing until the sync tables exist.
+ */
+function ShopifySyncIssues({ view, canWrite, onShopifyRetried }) {
+  const [state, setState] = useState(null);
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const load = useCallback(async () => {
+    const s = await loadShopifySyncState();
+    setState(s);
+    if (!s) return;
+    try { setRows(await loadShopifyStockIssues()); } catch { setRows([]); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!state) return null;
+
+  const stale = !state.last_ok_at || Date.now() - new Date(state.last_ok_at).getTime() > 5 * 60000;
+  const retry = async (row) => {
+    setBusy(row.id);
+    const r = await retryShopifyChange(row.id);
+    setBusy(null);
+    onShopifyRetried({ text: r.ok ? `Sent to Shopify: ${sizeLabel(row.size)} is now ${r.after}.` : `Still failing: ${r.error}`, tone: r.ok ? "ok" : "crit" });
+    load();
+  };
+
+  return (
+    <div className="sr-card" style={{ marginBottom: 16, borderColor: "var(--sr-gold-line)" }}>
+      <div className="sr-card-head">
+        <h2>Shopify stock sync</h2>
+        <Badge tone={stale ? "crit" : rows?.length ? "low" : "ok"}>{stale ? "Not running" : rows?.length ? `${formatUnits(rows.length)} to check` : "Running"}</Badge>
+      </div>
+      <p className="sr-card-sub">
+        Shopify holds the true LXRTS count. Every minute the app copies Shopify's numbers for designs just sold on the website and a rotating batch of the rest.
+        {" "}Last run {minutesAgo(state.last_run_at) || "never"}{state.last_ok_at ? `, ${formatUnits(state.last_checked || 0)} designs checked, ${formatUnits(state.last_changed || 0)} sizes updated` : ""}.
+        {state.last_error ? ` Note: ${state.last_error}` : ""}
+      </p>
+      {rows?.length > 0 && (
+        <div className="sr-scroller">
+          <table className="sr-table sr-rtable" style={{ "--sr-table-min": "900px" }}>
+            <thead><tr><th>Design</th><th>When</th><th>From</th><th>Size</th><th className="n">Change</th><th>Problem</th><th></th></tr></thead>
+            <tbody>
+              {rows.slice(0, 50).map((m) => {
+                const p = view.productsById[m.product_id];
+                const change = m.action === "set" ? `set to ${m.requested_quantity}` : `${m.requested_change > 0 ? "+" : ""}${m.requested_change}`;
+                return (
+                  <tr key={m.id}>
+                    <td className="is-primary">{p ? <ProductCell product={p} /> : "Product no longer live"}</td>
+                    <td data-label="When">{formatDay(m.created_at)}</td>
+                    <td data-label="From">{SOURCE_LABEL[m.source] || m.source || "—"}{m.order_no ? ` · ${m.order_no}` : ""}</td>
+                    <td data-label="Size">{m.size ? sizeLabel(m.size) : "—"}</td>
+                    <td data-label="Change" className="n tot">{change}</td>
+                    <td data-label="Problem" style={{ whiteSpace: "normal" }}>{m.status === "unknown" ? "Shopify did not answer. Check this size on Shopify before changing it again." : m.error}</td>
+                    <td data-label="">
+                      {m.status === "failed" && m.retryable && canWrite
+                        ? <button type="button" className="sr-btn" disabled={busy === m.id} onClick={() => retry(m)}>{busy === m.id ? "Sending…" : "Retry"}</button>
+                        : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function IntegrityScreen({ view, canWrite, canEditProducts, openEditor, openAction, onShopifyRetried }) {
   const recount = canWrite ? (productId, size) => openAction("adjust", { locationId: "", lines: [{ productId, size }] }) : null;
   const { findings } = view;
@@ -178,6 +259,7 @@ export default function IntegrityScreen({ view, canWrite, canEditProducts, openE
           ? `${formatUnits(view.integrityTotal)} findings in the product data${unsent ? ` · ${formatUnits(unsent)} Shopify changes not sent` : ""}`
           : "No problems found in the product data"} />
       <div className="sr-body">
+        <ShopifySyncIssues view={view} canWrite={canWrite} onShopifyRetried={onShopifyRetried} />
         {view.ledger?.installed && <ShopifyUnsent view={view} canWrite={canWrite} onShopifyRetried={onShopifyRetried} />}
         <div className="sr-grid k3">
           {SECTIONS.filter((s) => s.tone !== "info").map((s) => (

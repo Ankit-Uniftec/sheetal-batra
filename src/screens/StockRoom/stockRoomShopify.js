@@ -82,7 +82,7 @@ async function sendToShopify(rows) {
   for (const m of rows) {
     // The edge function's "reduce": a positive quantity lowers stock. A sale
     // recorded as legacy_delta -1 therefore sends +1.
-    const res = await adjustShopifyInventory(m.product_id, m.size, -m.legacy_delta);
+    const res = await adjustShopifyInventory(m.product_id, m.size, -m.legacy_delta, { source: "stock-room" });
     if (res.ok) {
       sent.push(m.id);
     } else {

@@ -13,7 +13,7 @@ import { fetchAllRows } from "../utils/fetchAllRows";
 import { restoreAssociateSession } from "../utils/restoreAssociateSession";
 import { usePopup } from "../components/Popup"; // Import Popup component
 import ExtrasPopup from "../components/ExtrasPopup";
-import config from "../config/config";
+import { fetchShopifyInventory } from "../utils/shopifyInventory";
 import { isOrderMode } from "../utils/orderMode";
 import { STOCK_HEAD_OPTIONS, isValidStockHeadDesignation } from "../utils/stockProductionHead";
 import { chartValueSet, measurementsForSize } from "../utils/b2bSizeChart";
@@ -1530,27 +1530,10 @@ export default function ProductForm() {
       setIsMenProduct(false);
 
       try {
-        // Fetch latest inventory from Shopify and update our database
-        const { data: { session } } = await supabase.auth.getSession();
-
-        // Fetch latest inventory from Shopify and update our database
-        const response = await fetch(
-          `${config.SUPABASE_URL}/functions/v1/shopify-inventory`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": config.SUPABASE_KEY,
-              "Authorization": `Bearer ${config.SUPABASE_KEY}`,
-            },
-            body: JSON.stringify({
-              action: "fetch",
-              product_id: selectedProduct.id,
-            }),
-          }
-        );
-
-        const result = await response.json();
+        // Fetch latest inventory from Shopify (the function also refreshes
+        // product_variants). null = Shopify could not be read → DB fallback below.
+        const live = await fetchShopifyInventory(selectedProduct.id);
+        const result = live ? { success: true, inventory: live } : { success: false };
 
         if (result.success && result.inventory) {
           // Use inventory from Shopify sync
