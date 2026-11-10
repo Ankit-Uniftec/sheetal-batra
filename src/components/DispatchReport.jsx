@@ -44,6 +44,8 @@ export default function DispatchReport({ hideMoney = false }) {
   const [channel, setChannel] = useState("all");
   const [courier, setCourier] = useState("all");
   const [q, setQ] = useState("");
+  // Release 34: tick boxes to print / export only some rows (none ticked = all shown).
+  const [picked, setPicked] = useState(() => new Set());
 
   const [start, end] = useMemo(() => rangeFor(preset, from, to), [preset, from, to]);
 
@@ -79,12 +81,20 @@ export default function DispatchReport({ hideMoney = false }) {
       (!s || [r.orderNo, r.box, r.name, r.pincode, r.awb, ...r.products].some((x) => String(x || "").toLowerCase().includes(s))));
   }, [rows, channel, courier, q]);
 
-  const totals = useMemo(() => ({
-    boxes: shown.length,
-    orders: new Set(shown.map((r) => r.orderId)).size,
-    value: shown.reduce((s, r) => s + (r.boxValue || 0), 0),
-    collect: shown.reduce((s, r) => s + (r.toCollect || 0), 0),
-  }), [shown]);
+  // Ticked rows that are still on screen (a filter can hide a ticked row).
+  const pickedShown = useMemo(() => shown.filter((r) => picked.has(r.shipmentId)), [shown, picked]);
+  const output = pickedShown.length ? pickedShown : shown;
+  const allTicked = shown.length > 0 && pickedShown.length === shown.length;
+  const toggleRow = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleAll = () => setPicked(allTicked ? new Set() : new Set(shown.map((r) => r.shipmentId)));
+
+  const sumOf = (list) => ({
+    boxes: list.length,
+    orders: new Set(list.map((r) => r.orderId)).size,
+    value: list.reduce((s, r) => s + (r.boxValue || 0), 0),
+    collect: list.reduce((s, r) => s + (r.toCollect || 0), 0),
+  });
+  const totals = useMemo(() => sumOf(shown), [shown]);
 
   const periodText = preset === "today" ? `Today, ${formatDate(start)}`
     : preset === "yesterday" ? `Yesterday, ${formatDate(start)}`
@@ -101,7 +111,7 @@ export default function DispatchReport({ hideMoney = false }) {
     r.deliveryDate ? formatDate(r.deliveryDate) : "",
     r.dispatchedAt ? `${formatDate(r.dispatchedAt)} ${time(r.dispatchedAt)}` : "",
     r.name,
-    r.address,
+    r.store ? `${r.store}, ${r.address}` : r.address,
     r.pincode,
     money(r.boxValue),
     money(r.toCollect),
@@ -113,27 +123,39 @@ export default function DispatchReport({ hideMoney = false }) {
   const exportCsv = () => downloadCsv({
     filename: `dispatch_report_${toInput(start)}`,
     headers: HEADERS,
-    rows: shown.map(cells),
+    rows: output.map(cells),
   });
 
   // A clean A4 sheet in its own window: just the report, nothing of the dashboard.
   const print = () => {
     const w = window.open("", "_blank");
     if (!w) return;
+    const t = sumOf(output);
+    const summary = [
+      ["Period", periodText],
+      ["Boxes", String(t.boxes)],
+      ["Orders", String(t.orders)],
+      ...(hideMoney ? [] : [["Box value", money(t.value)], ["To collect", money(t.collect)]]),
+      ...(channel !== "all" ? [["Channel", channel]] : []),
+      ...(courier !== "all" ? [["Courier", courier]] : []),
+      ...(pickedShown.length ? [["Rows", `${pickedShown.length} selected of ${shown.length}`]] : []),
+      ["Printed", new Date().toLocaleString("en-IN")],
+    ];
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Dispatch report — ${esc(periodText)}</title>
 <style>
   @page { size: A4 landscape; margin: 10mm; }
   body { font-family: Arial, sans-serif; font-size: 10px; color: #222; }
   h1 { font-size: 16px; margin: 0 0 4px; } .meta { margin-bottom: 8px; color: #555; }
-  table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #ccc; padding: 4px; text-align: left; vertical-align: top; }
-  th { background: #f3eedf; } td.n { text-align: right; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #ccc; padding: 4px; text-align: center; vertical-align: middle; }
+  th { background: #f3eedf; } td.n { white-space: nowrap; }
   tfoot td { font-weight: bold; background: #faf8f2; }
+  table.sum { width: auto; margin-bottom: 10px; } table.sum th { text-align: center; font-weight: bold; } table.sum td { font-weight: bold; }
 </style></head><body>
 <h1>Sheetal Batra — Dispatch report</h1>
-<div class="meta">${esc(periodText)} · ${totals.boxes} box${totals.boxes === 1 ? "" : "es"} · ${totals.orders} order${totals.orders === 1 ? "" : "s"}${channel !== "all" ? ` · ${esc(channel)}` : ""}${courier !== "all" ? ` · ${esc(courier)}` : ""} · printed ${esc(new Date().toLocaleString("en-IN"))}</div>
+<table class="sum"><tr>${summary.map(([k]) => `<th>${esc(k)}</th>`).join("")}</tr><tr>${summary.map(([, v]) => `<td>${esc(v)}</td>`).join("")}</tr></table>
 <table><thead><tr>${HEADERS.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>
-${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${!hideMoney && (i === 9 || i === 10) ? ' class="n"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("\n")}
-</tbody>${hideMoney ? "" : `<tfoot><tr><td colspan="9">Total</td><td class="n">${esc(money(totals.value))}</td><td class="n">${esc(money(totals.collect))}</td><td colspan="2"></td></tr></tfoot>`}</table>
+${output.map((r) => `<tr>${cells(r).map((c, i) => `<td${!hideMoney && (i === 9 || i === 10) ? ' class="n"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("\n")}
+</tbody>${hideMoney ? "" : `<tfoot><tr><td colspan="9">Total</td><td class="n">${esc(money(t.value))}</td><td class="n">${esc(money(t.collect))}</td><td colspan="2"></td></tr></tfoot>`}</table>
 <script>window.onload = function () { window.print(); };</script>
 </body></html>`);
     w.document.close();
@@ -165,8 +187,10 @@ ${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${!hideMoney && (i === 9 ||
           </select>
           <input type="search" placeholder={hideMoney ? "Order no, box, name, AWB…" : "Order no, box, name, pincode, AWB…"} value={q} onChange={(e) => setQ(e.target.value)} />
           <button type="button" onClick={() => load()} disabled={loading}>Refresh</button>
-          <button type="button" onClick={exportCsv} disabled={!shown.length}>⬇ CSV</button>
-          <button type="button" className="primary" onClick={print} disabled={!shown.length}>🖨 Print</button>
+          <button type="button" onClick={exportCsv} disabled={!shown.length}>⬇ CSV{pickedShown.length ? ` (${pickedShown.length})` : ""}</button>
+          <button type="button" className="primary" onClick={print} disabled={!shown.length}>
+            🖨 {pickedShown.length ? `Print selected (${pickedShown.length})` : "Print all"}
+          </button>
         </div>
       </div>
 
@@ -176,6 +200,9 @@ ${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${!hideMoney && (i === 9 ||
         {!hideMoney && <span>Box value <b>{money(totals.value)}</b></span>}
         {!hideMoney && <span>To collect <b>{money(totals.collect)}</b></span>}
         <span className="dr-muted">{periodText}{updatedAt ? ` · updated ${time(updatedAt)} (auto every minute)` : ""}</span>
+        {pickedShown.length > 0 && (
+          <span className="dr-picked">{pickedShown.length} selected <button type="button" onClick={() => setPicked(new Set())}>Clear</button></span>
+        )}
       </div>
 
       {error && <div className="dr-error">Could not load the report: {error}</div>}
@@ -187,10 +214,14 @@ ${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${!hideMoney && (i === 9 ||
       ) : (
         <div className="dr-table-wrap">
           <table className="dr-table">
-            <thead><tr>{HEADERS.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+            <thead><tr>
+              <th className="dr-check"><input type="checkbox" checked={allTicked} onChange={toggleAll} aria-label="Select all rows" /></th>
+              {HEADERS.map((h) => <th key={h}>{h}</th>)}
+            </tr></thead>
             <tbody>
               {shown.map((r) => (
-                <tr key={r.shipmentId}>
+                <tr key={r.shipmentId} className={picked.has(r.shipmentId) ? "dr-row-on" : ""}>
+                  <td className="dr-check"><input type="checkbox" checked={picked.has(r.shipmentId)} onChange={() => toggleRow(r.shipmentId)} aria-label={`Select box ${r.box || r.orderNo}`} /></td>
                   <td className="dr-mono">{r.box || "—"}{r.part && <div className="dr-muted">part {r.part}</div>}</td>
                   <td className="dr-mono">{r.orderNo}<div className="dr-muted">{r.channel}</div></td>
                   <td>{r.products.join("; ") || "—"}{r.pieces.length > 0 && <div className="dr-muted">{r.pieces.join(", ")}</div>}</td>
@@ -198,7 +229,7 @@ ${shown.map((r) => `<tr>${cells(r).map((c, i) => `<td${!hideMoney && (i === 9 ||
                   <td>{r.deliveryDate ? formatDate(r.deliveryDate) : "—"}</td>
                   <td>{r.dispatchedAt ? <>{formatDate(r.dispatchedAt)}<div className="dr-muted">{time(r.dispatchedAt)}</div></> : "—"}</td>
                   <td>{r.name || "—"}{!hideMoney && r.phone && <div className="dr-muted">{r.phone}</div>}{hideMoney && r.modeOfDelivery && <div className="dr-muted">{r.modeOfDelivery}</div>}</td>
-                  {!hideMoney && <td>{r.address || "—"}{r.modeOfDelivery && <div className="dr-muted">{r.modeOfDelivery}</div>}</td>}
+                  {!hideMoney && <td>{r.store && <b>{r.store}</b>}<div>{r.address || "—"}</div>{r.modeOfDelivery && r.modeOfDelivery !== r.store && <div className="dr-muted">{r.modeOfDelivery}</div>}</td>}
                   {!hideMoney && <td>{r.pincode || "—"}</td>}
                   {!hideMoney && <td className="dr-num">{money(r.boxValue)}</td>}
                   {!hideMoney && <td className={`dr-num ${r.toCollect > 0 ? "dr-due" : ""}`}>{money(r.toCollect)}</td>}
