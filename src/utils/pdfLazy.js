@@ -10,6 +10,9 @@ export const downloadCustomerPdf = async (...args) =>
 export const downloadWarehousePdf = async (...args) =>
   (await import("./pdfUtils")).downloadWarehousePdf(...args);
 
+export const openPrivateWarehousePdf = async (...args) =>
+  (await import("./pdfUtils")).openPrivateWarehousePdf(...args);
+
 export const downloadSingleWarehousePdf = async (...args) =>
   (await import("./pdfUtils")).downloadSingleWarehousePdf(...args);
 

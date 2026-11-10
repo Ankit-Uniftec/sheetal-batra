@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { fetchAllRows } from "../../utils/fetchAllRows";
@@ -24,10 +25,27 @@ import { getOrderChannelLabel, getOrderChannelKey, getStageLabel, PRODUCTION_STA
 import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import PeriodFilter, { usePeriodFilter, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import DashboardHeader from "../../components/DashboardHeader";
+import ComponentJourneyModal from "../../components/ComponentJourneyModal";
+import { usePopup } from "../../components/Popup";
+import { enrichComponentsWithMovements } from "../../utils/barcodeService";
+import { openPrivateWarehousePdf } from "../../utils/pdfLazy";
+import { RM_ORDER_COLUMNS } from "./rmOrderColumns";
+import RmSalesTeam from "./RmSalesTeam";
+import RmOrderIssues from "./RmOrderIssues";
 
 // Channels this dashboard never shows, dropped once at load (Release 13:
-// Shopify; Release 17: B2B and B2B internal stock).
-const HIDDEN_CHANNELS = new Set(["shopify", "b2b", "b2b_stock"]);
+// Shopify; Release 17: B2B and B2B internal stock; Release 32: Private).
+const HIDDEN_CHANNELS = new Set(["shopify", "b2b", "b2b_stock", "private"]);
+
+// Store filter on the Orders tab, by channel (order-number prefix), so
+// Exhibition and Retail Stock can be picked too.
+const STORE_FILTER_OPTIONS = ["Delhi Store", "Ludhiana Store", "Exhibition", "Retail Stock"];
+
+// Retail Stock orders are internal stock (0 value), so they never count as
+// sales; shown as their own count instead (Release 32, "show stock").
+const isRetailStockOrder = (o) => getOrderChannelKey(o) === "retail_stock"
+    && !["cancelled", "revoked"].includes(String(o.status || "").toLowerCase());
+const piecesOf = (o) => (o.items || []).reduce((q, it) => q + (Number(it?.quantity) || 1), 0);
 
 const COMPARISON_OPTIONS = [
     { value: "none", label: "No comparison" },
@@ -190,6 +208,10 @@ export default function RetailManagerDashboard() {
     const clearOrdersPeriod = () => { ordersPeriodProps.setTimeline("all"); ordersPeriodProps.setCustomFrom(""); ordersPeriodProps.setCustomTo(""); };
     const [openDropdown, setOpenDropdown] = useState(null);
     const dropdownRef = useRef(null);
+    const { showPopup, PopupComponent } = usePopup();
+    const [journey, setJourney] = useState(null);
+    const [busyOrder, setBusyOrder] = useState(null);
+    const [myEmail, setMyEmail] = useState("");
 
     // ═══════════════════════════════════════════════════════════
     // AUTH & DATA FETCH
@@ -210,6 +232,7 @@ export default function RetailManagerDashboard() {
                 navigate("/login", { replace: true });
                 return;
             }
+            setMyEmail(session.user.email?.toLowerCase() || "");
             fetchAllData();
         };
         checkAuthAndFetch();
@@ -220,7 +243,9 @@ export default function RetailManagerDashboard() {
         try {
             // products_live was fetched here (a full paged scan of every SKU) and
             // then never read — the Stock tab gets its own data from StockPanel.
-            const ordersRes = await fetchAllRows("orders", (q) => q.select("*").order("created_at", { ascending: false }));
+            // Named columns, never "*": no client address / phone / email reaches
+            // this browser (Release 32, client name only). See rmOrderColumns.js.
+            const ordersRes = await fetchAllRows("orders", (q) => q.select(RM_ORDER_COLUMNS).order("created_at", { ascending: false }));
             // No website (Shopify) order reaches this dashboard at all — not in
             // any tab, total, chart, comparison or the Production pieces
             // (client decision 2026-10-14: the Retail Manager sees no Shopify
@@ -268,6 +293,30 @@ export default function RetailManagerDashboard() {
     }, []);
 
     const handleLogout = async () => { await supabase.auth.signOut(); navigate("/login"); };
+
+    // View-only journey of every piece in an order (same modal GM uses).
+    const openJourney = async (order) => {
+        setBusyOrder(`j-${order.id}`);
+        try {
+            const { data, error } = await supabase.from("order_components").select("*").eq("order_id", order.id).order("created_at");
+            if (error) throw error;
+            if (!data?.length) {
+                showPopup({ title: "No Pieces Yet", message: `${order.order_no} has no pieces in production yet.`, type: "info" });
+                return;
+            }
+            setJourney({ orderNo: order.order_no, components: await enrichComponentsWithMovements(data) });
+        } catch (err) {
+            showPopup({ title: "Could not open the journey", message: err?.message || String(err), type: "error" });
+        } finally { setBusyOrder(null); }
+    };
+
+    // Warehouse PDF without client address / phone; made in the browser,
+    // nothing saved (pdfUtils.openPrivateWarehousePdf).
+    const openWhPdf = async (order) => {
+        setBusyOrder(`p-${order.id}`);
+        await openPrivateWarehousePdf(order, RM_ORDER_COLUMNS);
+        setBusyOrder(null);
+    };
 
     // ═══════════════════════════════════════════════════════════
     // HELPERS
@@ -349,6 +398,9 @@ export default function RetailManagerDashboard() {
         const prevDelivered = prev.filter(o => o.status === "delivered").length;
 
         const totalItems = cur.reduce((s, o) => s + (o.items?.reduce((q, it) => q + (it.quantity || 1), 0) || 0), 0);
+        const stockCur = analyticsOrders.filter(o => inPeriod(o.created_at) && isRetailStockOrder(o));
+        const stockOrders = stockCur.length;
+        const stockPieces = stockCur.reduce((s, o) => s + piecesOf(o), 0);
         const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
         // Channel breakdown
@@ -404,7 +456,7 @@ export default function RetailManagerDashboard() {
             ordersGrowth: calcGrowth(totalOrders, prevOrders),
             deliveredGrowth: calcGrowth(deliveredOrders, prevDelivered),
             showComparison: comparison !== "none" && !!periodRangeValue,
-            channelBreakdown, revenueMix, topProducts, topColors,
+            channelBreakdown, revenueMix, topProducts, topColors, stockOrders, stockPieces,
         };
     }, [analyticsOrders, inPeriod, periodRangeValue, comparison]);
 
@@ -466,11 +518,13 @@ export default function RetailManagerDashboard() {
             return ch !== "Delhi Store" && ch !== "Ludhiana Store";
         });
         const otherTotal = periodRevenue(otherOrders);
+        const stockInPeriod = retailOrders.filter(o => inPeriod(o.created_at) && isRetailStockOrder(o));
 
         return {
             delhiDaily, ludhianaDaily, combinedDaily,
             delhiTotal, ludhianaTotal,
             otherTotal, otherCount: otherOrders.length,
+            stockOrders: stockInPeriod.length, stockPieces: stockInPeriod.reduce((s, o) => s + piecesOf(o), 0),
             delhiOrders: delhiOrders.length,
             ludhianaOrders: ludhianaOrders.length,
             delhiAov: delhiOrders.length > 0 ? Math.round(delhiTotal / delhiOrders.length) : 0,
@@ -660,6 +714,8 @@ export default function RetailManagerDashboard() {
                 ? (order.items || []).some(it => it?.product_name?.toLowerCase().includes(q))
                 : orderSearchField === "salesperson"
                     ? (getOrderSalesperson(order) || "").toLowerCase().includes(q)
+                : orderSearchField === "client"
+                    ? (order.delivery_name || "").toLowerCase().includes(q)
                     : order.order_no?.toLowerCase().includes(q);
             if (!hit) return false;
         }
@@ -671,7 +727,7 @@ export default function RetailManagerDashboard() {
         if (filters.payment.length > 0 && !filters.payment.includes(getPaymentStatus(order))) return false;
         if (filters.priority.length > 0 && !filters.priority.includes(getPriority(order))) return false;
         if (filters.orderType.length > 0 && !filters.orderType.includes(getOrderType(order))) return false;
-        if (filters.store.length > 0 && !filters.store.includes(order.salesperson_store)) return false;
+        if (filters.store.length > 0 && !filters.store.includes(getOrderChannel(order))) return false;
         if (filters.salesperson && getOrderSalesperson(order) !== filters.salesperson) return false;
         return true;
     };
@@ -777,7 +833,9 @@ export default function RetailManagerDashboard() {
                         <button className={`rm-nav-item ${activeTab === "store_analytics" ? "active" : ""}`} onClick={() => { setActiveTab("store_analytics"); setShowSidebar(false); }}>Store Analytics</button>
                         <button className={`rm-nav-item ${activeTab === "daywise_sales" ? "active" : ""}`} onClick={() => { setActiveTab("daywise_sales"); setShowSidebar(false); }}>Day-wise Sales</button>
                         <button className={`rm-nav-item ${activeTab === "product_analytics" ? "active" : ""}`} onClick={() => { setActiveTab("product_analytics"); setShowSidebar(false); }}>Product Analytics</button>
+                        <button className={`rm-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button>
                         <button className={`rm-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
+                        <button className={`rm-nav-item ${activeTab === "order_issues" ? "active" : ""}`} onClick={() => { setActiveTab("order_issues"); setShowSidebar(false); }}>Order Issues</button>
                         <button className={`rm-nav-item ${activeTab === "production" ? "active" : ""}`} onClick={() => { setActiveTab("production"); setShowSidebar(false); }}>Production</button>
                         <button className={`rm-nav-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</button>
                         <button className="rm-nav-item logout" onClick={handleLogout}>Logout</button>
@@ -786,6 +844,16 @@ export default function RetailManagerDashboard() {
 
                 {/* CONTENT */}
                 <main className="rm-content">
+
+                    {/* ═══════════ TAB: SALES TEAM (Release 32) ═══════════ */}
+                    {activeTab === "sales_team" && (
+                        <RmSalesTeam orders={retailOrders} myEmail={myEmail} showPopup={showPopup} />
+                    )}
+
+                    {/* ═══════════ TAB: ORDER ISSUES (Release 32) ═══════════ */}
+                    {activeTab === "order_issues" && (
+                        <RmOrderIssues orders={retailOrders} onJourney={openJourney} busyOrder={busyOrder} />
+                    )}
 
                     {/* ═══════════ TAB: STOCK ═══════════ */}
                     {/* Both stores + factory + the retail pool (no B2B or
@@ -910,7 +978,7 @@ export default function RetailManagerDashboard() {
                             </div>
 
                             {/* KPIs — computed over analyticsOrders, which is EVERY
-                                channel shown here (Private, Exhibition, stock), not
+                                channel shown here (both stores, Exhibition), not
                                 just the two retail stores. Titled accordingly: it read
                                 "Retail Performance" while showing company-wide numbers. */}
                             <h3 className="rm-subsection-title">Overall Performance {"—"} all channels</h3>
@@ -937,6 +1005,11 @@ export default function RetailManagerDashboard() {
                                     <span className="stat-label">Delivered</span>
                                     <span className="stat-value">{dashboardStats.deliveredOrders}</span>
                                     {dashboardStats.showComparison && <GrowthIndicator value={dashboardStats.deliveredGrowth} />}
+                                </div>
+                                <div className="rm-stat-card overview-card">
+                                    <span className="stat-label">Retail Stock Orders</span>
+                                    <span className="stat-value">{formatIndianNumber(dashboardStats.stockOrders)}</span>
+                                    <span className="stat-sub">{formatIndianNumber(dashboardStats.stockPieces)} pieces {"\u00b7"} not counted as sales</span>
                                 </div>
                             </div>
 
@@ -1072,7 +1145,7 @@ export default function RetailManagerDashboard() {
                             </div>
 
                             {/* Store summary cards */}
-                            <div className="rm-stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                            <div className="rm-stats-grid rm-daywise-cards">
                                 <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Delhi Revenue</span>
                                     <span className="stat-value">{"\u20B9"}{money(dayWiseData.delhiTotal)}</span>
@@ -1084,18 +1157,23 @@ export default function RetailManagerDashboard() {
                                     <span className="stat-sub">{dayWiseData.ludhianaOrders} orders</span>
                                 </div>
                                 <div className="rm-stat-card overview-card">
+                                    <span className="stat-label">Retail Stock</span>
+                                    <span className="stat-value">{formatIndianNumber(dayWiseData.stockOrders)} orders</span>
+                                    <span className="stat-sub">{formatIndianNumber(dayWiseData.stockPieces)} pieces {"\u00b7"} not sales</span>
+                                </div>
+                                <div className="rm-stat-card overview-card">
                                     <span className="stat-label">Combined Revenue</span>
                                     <span className="stat-value">{"\u20B9"}{money(dayWiseData.delhiTotal + dayWiseData.ludhianaTotal + dayWiseData.otherTotal)}</span>
                                     <span className="stat-sub">{dayWiseData.delhiOrders + dayWiseData.ludhianaOrders + dayWiseData.otherCount} orders</span>
                                 </div>
                             </div>
 
-                            {/* Everything not on a card above (Private, Exhibition,
+                            {/* Everything not on a card above (Exhibition,
                                 stock, unresolved channel). Shown only when non-zero so the
                                 Combined figure is always explainable. */}
                             {dayWiseData.otherCount > 0 && (
                                 <p className="rm-daywise-note">
-                                    Combined also includes {"₹"}{money(dayWiseData.otherTotal)} from {dayWiseData.otherCount} order{dayWiseData.otherCount === 1 ? "" : "s"} in other channels (Private, Exhibition, stock), which have no card above.
+                                    Combined also includes {"₹"}{money(dayWiseData.otherTotal)} from {dayWiseData.otherCount} order{dayWiseData.otherCount === 1 ? "" : "s"} in other channels (Exhibition, or no store on the order), which have no card above.
                                 </p>
                             )}
 
@@ -1374,6 +1452,7 @@ export default function RetailManagerDashboard() {
                                 <SearchByDropdown
                                     fields={[
                                         { value: "order_no", label: "Order Number" },
+                                        { value: "client", label: "Client Name" },
                                         { value: "product_name", label: "Product Name" },
                                         { value: "salesperson", label: "Salesperson" },
                                     ]}
@@ -1461,7 +1540,7 @@ export default function RetailManagerDashboard() {
                                     {openDropdown === "store" && (
                                         <div className="rm-dropdown-panel">
                                             <div className="rm-dropdown-title">Store</div>
-                                            {["Delhi Store", "Ludhiana Store"].map(opt => (
+                                            {STORE_FILTER_OPTIONS.map(opt => (
                                                 <label key={opt} className="rm-checkbox-label">
                                                     <input type="checkbox" checked={filters.store.includes(opt)} onChange={() => toggleFilter("store", opt)} />
                                                     <span>{opt}</span>
@@ -1494,10 +1573,12 @@ export default function RetailManagerDashboard() {
                             <div className="rm-table-wrapper">
                                 <div className="rm-table-container">
                                     <table className="rm-table">
-                                        {/* NO Customer column, NO Actions/PDF column */}
+                                        {/* Client NAME only (Release 32): no contact details are loaded.
+                                            Actions: view-only journey + warehouse PDF without contact. */}
                                         <thead>
                                             <tr>
                                                 <th>Order ID</th>
+                                                <th>Client</th>
                                                 <th>Product</th>
                                                 <th>Amount</th>
                                                 <th>Payment</th>
@@ -1505,11 +1586,12 @@ export default function RetailManagerDashboard() {
                                                 <th>Store</th>
                                                 <th>Salesperson</th>
                                                 <th>Date</th>
+                                                <th>Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {currentOrders.length === 0 ? (
-                                                <tr><td colSpan="8" className="rm-no-data">No orders found</td></tr>
+                                                <tr><td colSpan="10" className="rm-no-data">No orders found</td></tr>
                                             ) : currentOrders.map(order => {
                                                 const isUrgent = getPriority(order) === "urgent";
                                                 return (
@@ -1518,6 +1600,7 @@ export default function RetailManagerDashboard() {
                                                             <span className="rm-order-id">{order.order_no || "-"}</span>
                                                             {isUrgent && <span className="rm-urgent-badge">URGENT</span>}
                                                         </td>
+                                                        <td>{order.delivery_name || "-"}</td>
                                                         <td className="rm-product-cell">{order.items?.[0]?.product_name || "-"}</td>
                                                         <td>{"\u20B9"}{money(order.net_total ?? order.grand_total_after_discount ?? order.grand_total ?? 0)}</td>
                                                         <td>
@@ -1533,6 +1616,16 @@ export default function RetailManagerDashboard() {
                                                         <td>{order.salesperson_store || "-"}</td>
                                                         <td>{getOrderSalesperson(order) || "-"}</td>
                                                         <td>{formatDate(order.created_at)}</td>
+                                                        <td>
+                                                            <div className="rm-row-actions">
+                                                                <button className="rm-action-btn" disabled={!!busyOrder} onClick={() => openJourney(order)}>
+                                                                    {busyOrder === `j-${order.id}` ? "Opening\u2026" : "Journey"}
+                                                                </button>
+                                                                <button className="rm-action-btn" disabled={!!busyOrder} onClick={() => openWhPdf(order)}>
+                                                                    {busyOrder === `p-${order.id}` ? "Making\u2026" : "WH PDF"}
+                                                                </button>
+                                                            </div>
+                                                        </td>
                                                     </tr>
                                                 );
                                             })}
@@ -1547,6 +1640,11 @@ export default function RetailManagerDashboard() {
 
                 </main>
             </div>
+            {journey && createPortal(
+                <ComponentJourneyModal orderNo={journey.orderNo} components={journey.components} onClose={() => setJourney(null)} />,
+                document.body
+            )}
+            {PopupComponent}
         </div>
     );
 }
