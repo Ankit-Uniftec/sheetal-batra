@@ -316,6 +316,59 @@ export const downloadWarehousePdf = async (order, setLoading = null, forceRegene
 };
 
 /**
+ * Warehouse PDF without client contact (Release 32 — Retail Manager).
+ * Read-only: uses the order's EXISTING pieces (never mints barcodes), uploads
+ * nothing and writes nothing; the PDFs open from memory. The order is read with
+ * `columns` (the caller's list, which leaves out address / phone / email), and
+ * the document drops the delivery address and gift-recipient contact.
+ */
+export const openPrivateWarehousePdf = async (order, columns, setLoading = null) => {
+  try {
+    if (setLoading) setLoading(true);
+    const { data: full, error } = await supabase.from("orders").select(columns).eq("id", order.id).single();
+    if (error || !full) throw new Error(error?.message || "Order not found.");
+    const { data: components, error: cErr } = await supabase
+      .from("order_components").select("*").eq("order_id", full.id).order("created_at");
+    if (cErr) throw cErr;
+    if (!components?.length) throw new Error(`${full.order_no} has no pieces yet, so there is no warehouse PDF to show.`);
+    const barcodeData = generateOrderBarcodeImages(full.order_no, components);
+    const logoUrl = new URL(Logo, window.location.origin).href;
+    const garments = garmentItems(full.items || []);
+    if (!garments.length) throw new Error("No products in this order.");
+    const urls = [];
+    for (let gi = 0; gi < garments.length; gi++) {
+      const { item, index } = garments[gi];
+      const itemBarcodes = barcodeData.componentBarcodes.filter((cb) => {
+        const comp = components.find((c) => c.barcode === cb.barcode);
+        return comp ? comp.item_index === index : false;
+      });
+      const blob = await pdf(
+        <WarehouseOrderPdf
+          order={full}
+          item={item}
+          itemIndex={gi}
+          totalItems={garments.length}
+          logoUrl={logoUrl}
+          masterBarcodeImage={barcodeData.masterBarcode}
+          componentBarcodes={itemBarcodes}
+          resolvedClientName={full.delivery_name || ""}
+          hideContact
+        />
+      ).toBlob();
+      urls.push(URL.createObjectURL(blob));
+    }
+    urls.forEach((url, i) => setTimeout(() => window.open(url, "_blank"), i * 300));
+    return urls;
+  } catch (err) {
+    console.error("Private warehouse PDF failed:", err);
+    alert(err?.message || "Could not make the warehouse PDF.");
+    return null;
+  } finally {
+    if (setLoading) setLoading(false);
+  }
+};
+
+/**
  * Download a single warehouse PDF for a specific product
  * @param {object} order - Full order object
  * @param {number} productIndex - Index of the product (0-based)

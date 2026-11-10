@@ -567,7 +567,9 @@ const buildDeliveryAddress = (order) => {
   return parts.join(", ") + (phone ? `  ·  ${phone}` : "");
 };
 
-const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration }) => {
+// hideContact: the Retail Manager copy (Release 32) — client name only, no
+// delivery address, phone or gift-recipient contact.
+const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration, hideContact = false }) => {
   const rows = [
     { label: "Order ID:", value: order.order_no || order.order_id },
   ];
@@ -579,8 +581,8 @@ const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isU
     rows.push({ label: "SHOPIFY ORDER NO:", value: order.shopify_order_name, highlight: true });
   }
 
+  if (!hideContact) rows.push({ label: "DELIVERY TO:", value: buildDeliveryAddress(order) });
   rows.push(
-    { label: "DELIVERY TO:", value: buildDeliveryAddress(order) },
     { label: "CLIENT NAME:", value: clientNameForHeader },
     // "DISPATCH DATE", not "delivery": this field is getWarehouseDate() — the
     // T-2 production deadline (customer delivery_date minus 2 days), which is
@@ -602,7 +604,7 @@ const buildInfoRows = ({ order, item, clientNameForHeader, itemDeliveryDate, isU
   if (order.is_gifting && order.gift_recipient_name) {
     rows.push({
       label: "GIFT RECIPIENT:",
-      value: `${order.gift_recipient_name}${order.gift_recipient_contact ? ` (${order.gift_recipient_contact})` : ""}`,
+      value: `${order.gift_recipient_name}${order.gift_recipient_contact && !hideContact ? ` (${order.gift_recipient_contact})` : ""}`,
     });
   }
 
@@ -947,7 +949,7 @@ const AlterationInfoBox = ({ order }) => (
  * Warehouse PDF Document - ONE PDF PER PRODUCT
  * Now supports both regular orders and alteration orders
  */
-const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl, masterBarcodeImage = null, componentBarcodes = [], resolvedClientName = "" }) => {
+const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl, masterBarcodeImage = null, componentBarcodes = [], resolvedClientName = "", hideContact = false }) => {
   if (!order || !item) {
     console.error("WarehouseOrderPdf received undefined order or item.");
     return (
@@ -1044,7 +1046,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
             {isAlteration && <AlterationInfoBox order={order} />}
 
             {/* Order Info Grid */}
-            <InfoGrid rows={buildInfoRows({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration })} />
+            <InfoGrid rows={buildInfoRows({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration, hideContact })} />
 
             {/* Product Details Section */}
             <SectionBar title="Product Details" isAlteration={isAlteration} />
@@ -1140,7 +1142,7 @@ const WarehouseOrderPdf = ({ order, item, itemIndex = 0, totalItems = 1, logoUrl
               Document branches, and had already drifted (one said "SHOPIFY
               ORDER NO:", the other still "WEBSITE ORDER:"). One shared
               InfoGrid/buildInfoRows makes that drift impossible. */}
-          <InfoGrid rows={buildInfoRows({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration })} />
+          <InfoGrid rows={buildInfoRows({ order, item, clientNameForHeader, itemDeliveryDate, isUrgent, isAlteration, hideContact })} />
 
           {/* Product Details */}
           <SectionBar title="Product Details" isAlteration={isAlteration} />

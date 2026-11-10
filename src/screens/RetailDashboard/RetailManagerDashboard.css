@@ -1213,3 +1213,69 @@
 @media (min-width: 1025px) {
     .rm-hamburger { display: none; }
 }
+/* ============================================
+   Release 32 - Sales Team, Order Issues, row actions
+   ============================================ */
+.rm-daywise-cards { grid-template-columns: repeat(4, 1fr); }
+
+.rm-row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
+.rm-action-btn {
+    min-height: 40px; padding: 0 12px; border-radius: 6px;
+    border: 1px solid #d5b85a; background: #fff; color: #8a7020;
+    font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.rm-action-btn:hover:not(:disabled) { background: #d5b85a; color: #fff !important; }
+.rm-action-btn:disabled { opacity: .55; cursor: wait; }
+
+.rm-team-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.rm-team-select, .rm-team-btn {
+    min-height: 40px; padding: 0 12px; border-radius: 6px; border: 1px solid #D4D4D4;
+    background: #FFFFFFB0; font-size: 13px; cursor: pointer;
+}
+.rm-team-btn { border-color: #d5b85a; color: #8a7020; font-weight: 600; }
+.rm-team-btn:hover { background: #d5b85a; color: #fff !important; }
+.rm-team-note { font-size: 12px; color: #666; margin: 6px 0 16px; line-height: 1.5; }
+.rm-team-warn { font-size: 13px; color: #9a5b00; background: #fff6e0; border: 1px solid #f0d58a; border-radius: 8px; padding: 10px 12px; }
+.rm-team-empty { font-size: 13px; color: #888; margin: 8px 0; }
+.rm-team-stores { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.rm-team-store-target { display: flex; align-items: center; gap: 8px; order: 3; font-size: 12px; color: #666; width: 100%; }
+.rm-team-store .stat-sub, .rm-team-store .rm-team-bar { order: 4; }
+.rm-target-input {
+    min-height: 40px; width: 140px; padding: 0 10px; border-radius: 6px;
+    border: 1px solid #D4D4D4; background: #fff; font-size: 13px;
+}
+.rm-target-input:focus { outline: none; border-color: #d5b85a; box-shadow: 0 0 0 2px #d5b85a33; }
+.rm-target-input:disabled { background: #f3f3f3; color: #999; }
+.rm-team-bar { height: 6px; width: 100%; background: #eee; border-radius: 4px; overflow: hidden; }
+.rm-team-bar.small { height: 4px; margin-top: 4px; min-width: 60px; }
+.rm-team-bar i { display: block; height: 100%; background: #d5b85a; }
+.rm-team-rank { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+.rm-team-rank-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+.rm-team-rank-row b { width: 26px; height: 26px; border-radius: 50%; background: #d5b85a; color: #fff !important; display: grid; place-items: center; font-size: 12px; }
+.rm-team-rank-row.is-low b { background: #c0563b; }
+.rm-team-rank-row em { display: block; font-style: normal; font-size: 11px; color: #888; }
+.rm-pace { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 10px; }
+.rm-pace.ok { background: #e6f4ea; color: #1e7b34 !important; }
+.rm-pace.behind { background: #fdecea; color: #b3261e !important; }
+
+.rm-issue-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 8px; }
+.rm-issue-tile { text-align: left; cursor: pointer; border-width: 2px; }
+.rm-issue-tile.is-active { border-color: #d5b85a; box-shadow: 0 4px 12px rgba(213, 184, 90, .25); }
+.rm-issue-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
+.rm-issue-rank { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) 32px 40px; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; }
+.rm-issue-rank-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-issue-rank b { text-align: right; }
+.rm-issue-rank em { font-style: normal; color: #888; font-size: 12px; text-align: right; }
+.rm-issue-reason { max-width: 260px; white-space: normal; }
+
+@media (max-width: 1024px) {
+    .rm-daywise-cards { grid-template-columns: repeat(2, 1fr); }
+    .rm-issue-tiles { grid-template-columns: repeat(3, 1fr); }
+    .rm-issue-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+    .rm-team-rank { grid-template-columns: 1fr; }
+    .rm-issue-tiles { grid-template-columns: repeat(2, 1fr); }
+    .rm-team-controls { width: 100%; }
+    .rm-team-select, .rm-team-btn { flex: 1 1 140px; }
+}
