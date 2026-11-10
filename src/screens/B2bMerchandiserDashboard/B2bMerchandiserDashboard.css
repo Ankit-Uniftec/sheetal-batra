@@ -524,3 +524,62 @@
    height so the row keeps one baseline. Brand gold, not the destructive red. */
 .merch-export-btn { height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid #d5b85a; background: #fff; color: #8b7240; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .merch-export-btn:hover { background: #d5b85a; color: #fff; }
+
+/* ===== Release 33: analytics sections + partner payments ===== */
+.merch-an { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+.merch-an-card { background: #fff; border: 1px solid #eee3c4; border-radius: 14px; padding: 16px; }
+.merch-an-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.merch-an-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.merch-an-head p { margin: 4px 0 0; font-size: 12px; color: #777; max-width: 720px; line-height: 1.45; }
+.merch-an-card h4 { margin: 0 0 4px; font-size: 13px; color: #8b7240; }
+.merch-an-btn, .merch-pay-open { min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid #d5b85a; background: #fff; color: #8b7240; font-weight: 600; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.merch-an-btn:hover, .merch-pay-open:hover { background: #d5b85a; color: #fff; }
+.merch-an-empty { color: #999; font-size: 13px; padding: 10px 0; text-align: left; }
+.merch-an-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.merch-an-table-wrap { overflow-x: auto; }
+.merch-an-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+.merch-an-table th { background: #f9f5eb; border-bottom: 2px solid #e8d98a; padding: 10px 14px; text-align: left; font-weight: 600; }
+.merch-an-table td { padding: 10px 14px; border-bottom: 1px solid #f0e8c8; }
+.merch-an-table tbody tr:nth-child(even) td { background: #fdfaf2; }
+.merch-an-click { cursor: pointer; }
+.merch-an-click:hover td { background: #fff8e6 !important; }
+.merch-an-more { color: #8b7240; font-weight: 600; text-align: right; white-space: nowrap; }
+.merch-an-sub td { background: #fffdf6 !important; padding: 6px 14px 12px; }
+.merch-an-subrow { display: grid; grid-template-columns: 170px minmax(0, 1fr) 120px 110px 100px; gap: 10px; padding: 6px 0; border-bottom: 1px dashed #eee3c4; font-size: 12px; }
+.merch-an-subrow span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.merch-pay-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.merch-pay-modal { background: #fff; border-radius: 16px; width: min(860px, 100%); max-height: 92vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+.merch-pay-head { display: flex; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid #f0e8c8; position: sticky; top: 0; background: #fff; z-index: 1; }
+.merch-pay-head h3 { margin: 0; font-size: 17px; }
+.merch-pay-head p { margin: 4px 0 0; font-size: 13px; color: #666; }
+.merch-pay-x { border: none; background: none; font-size: 26px; cursor: pointer; color: #888; min-width: 40px; min-height: 40px; }
+.merch-pay-body { padding: 16px 20px; }
+.merch-pay-body h4, .merch-pay-hist h4 { margin: 8px 0 10px; font-size: 13px; color: #8b7240; }
+.merch-pay-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.merch-pay-row { display: grid; grid-template-columns: 24px minmax(0, 1.4fr) 1fr 1fr 130px; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid #eee; border-radius: 10px; cursor: pointer; font-size: 13px; }
+.merch-pay-row.is-on { border-color: #d5b85a; background: #fffbef; }
+.merch-pay-row em, .merch-pay-num em { display: block; font-style: normal; font-size: 11px; color: #888; }
+.merch-pay-amt, .merch-pay-form select, .merch-pay-form input { min-height: 40px; border: 1px solid #ddd; border-radius: 8px; padding: 0 10px; font-size: 13px; width: 100%; background: #fff; }
+.merch-pay-amt:disabled { background: #f5f5f5; }
+.merch-pay-form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.merch-pay-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #666; }
+.merch-pay-form input[type=file] { padding: 8px 10px; }
+.merch-pay-foot { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid #f0e8c8; flex-wrap: wrap; }
+.merch-pay-foot > span { flex: 1 1 240px; font-size: 13px; color: #555; }
+.merch-pay-warn { color: #b3261e !important; }
+.merch-pay-cancel, .merch-pay-save { min-height: 40px; padding: 0 18px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; }
+.merch-pay-cancel { border: 1px solid #ddd; background: #fff; color: #555; }
+.merch-pay-save { border: none; background: #d5b85a; color: #fff; }
+.merch-pay-save:disabled { opacity: .5; cursor: not-allowed; }
+.merch-pay-hist { padding: 4px 20px 18px; }
+.merch-pay-hrow { display: grid; grid-template-columns: 110px 1fr 120px 110px; gap: 10px; padding: 6px 0; border-bottom: 1px solid #f3eedd; font-size: 12px; }
+.merch-pay-hrow b { text-align: right; }
+
+@media (max-width: 768px) {
+  .merch-an-two, .merch-pay-form { grid-template-columns: 1fr; }
+  .merch-pay-row { grid-template-columns: 24px 1fr 1fr; }
+  .merch-pay-row .merch-pay-owes { grid-column: 2; }
+  .merch-pay-row .merch-pay-amt { grid-column: 3; }
+  .merch-an-subrow { grid-template-columns: 1fr 1fr; }
+}

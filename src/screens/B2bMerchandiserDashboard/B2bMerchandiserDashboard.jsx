@@ -17,6 +17,8 @@ import UpdatePaymentModal from "../../components/UpdatePaymentModal";
 import { canUpdateB2bPayment, b2bPaymentState, recordPayment, paymentRecordedPopup } from "../../utils/recordPayment";
 import PostDispatchModal from "../../components/PostDispatchModal";
 import PostDispatchAnalytics from "../../components/PostDispatchAnalytics";
+import MerchAnalytics from "./MerchAnalytics";
+import VendorPaymentModal from "./VendorPaymentModal";
 import { canPostDispatch, revokeBlock, fetchPostDispatchActions, groupActionsByOrder } from "../../utils/postDispatch";
 import { canCancelB2bAnytime } from "../../utils/appEnvironment";
 import { enrichComponentsWithMovements, getOrderChannelLabel, getOrderStatusLabel, getOrderProgressStatus } from "../../utils/barcodeService";
@@ -27,7 +29,7 @@ import { cancelOrder as runCancelOrder } from "../../utils/cancelOrder";
 import useTabParam from "../../hooks/useTabParam";
 import useFilterParam, { useClearFilterParams } from "../../hooks/useFilterParam";
 import Paginator from "../../components/Paginator";
-import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange } from "../../components/PeriodFilter";
+import { usePeriodFilter, usePeriodFilterParam, comparisonPeriodRange, inRange, periodLabel } from "../../components/PeriodFilter";
 import { startB2bStockOrder, clearB2bStockOrder, startNewB2bOrder, clearB2bOrderFlow, startB2bGifting, isPartnerGiftingRow } from "../../utils/b2bStockOrder";
 import WarehouseTab from "../../components/stock/WarehouseTab";
 import StockExchangeTab from "../../components/stock/StockExchangeTab";
@@ -164,7 +166,10 @@ export default function B2bMerchandiserDashboard() {
     // compares against the immediately-preceding period of the same length).
     const {
         control: analyticsPeriodControl, inPeriod: inAnalyticsPeriod, range: analyticsPeriodRange,
+        timeline: analyticsTimeline,
     } = usePeriodFilter("month", { variant: "pills" });
+    // Release 33: money received from a partner (Vendor Book card).
+    const [payVendor, setPayVendor] = useState(null);
     const [analyticsPage, setAnalyticsPage] = useState(1);
 
     // ==================== FETCH DATA ====================
@@ -1380,6 +1385,9 @@ export default function B2bMerchandiserDashboard() {
                                     const creditLimit = vendor.credit_limit || 0;
                                     const available = creditLimit - creditUsed;
                                     const pct = creditLimit > 0 ? (creditUsed / creditLimit) * 100 : 0;
+                                    // Release 33: what the partner still owes (consignment apart).
+                                    const owed = orders.filter(o => o.vendor_id === vendor.id && canUpdateB2bPayment(o) && String(o.b2b_order_type || "").toLowerCase() !== "consignment")
+                                        .reduce((s, o) => s + b2bPaymentState(o).balance, 0);
                                     const vendorChartName = vendor.size_chart_id ? (sizeCharts.find(sc => sc.id === vendor.size_chart_id)?.name || null) : null;
                                     return (
                                         <div key={vendor.id} className="merch-vendor-card-full" onClick={() => handleViewVendorOrders(vendor.id)} style={{ cursor: "pointer" }}>
@@ -1422,6 +1430,7 @@ export default function B2bMerchandiserDashboard() {
                                                         <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Credit Limit:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(creditLimit)}`}</span></div>
                                                         <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Credit Used:</span><span className="merch-ocard-dval">{`\u20B9${formatIndianNumber(creditUsed)}`}</span></div>
                                                         <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Available:</span><span className={`merch-ocard-dval ${available <= 0 ? "merch-red" : ""}`}>{`\u20B9${formatIndianNumber(available)}`}</span></div>
+                                                        <div className="merch-ocard-gitem"><span className="merch-ocard-dlabel">Outstanding:</span><span className={`merch-ocard-dval ${owed > 0 ? "merch-red" : ""}`}>{`\u20B9${formatIndianNumber(Math.round(owed))}`}</span></div>
                                                     </div>
                                                     <div className="merch-vc-bar-row">
                                                         <div className="merch-vc-bar-full"><div className={`merch-vc-fill ${pct > 80 ? "danger" : pct > 50 ? "warn" : "safe"}`} style={{ width: `${Math.min(pct, 100)}%` }}></div></div>
@@ -1436,6 +1445,7 @@ export default function B2bMerchandiserDashboard() {
                                                     <button onClick={(e) => handleToggleStar(e, vendor)} style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${(vendor.starred_by || []).includes(profile?.saleperson || "") ? "#f9a825" : "#ddd"}`, background: (vendor.starred_by || []).includes(profile?.saleperson || "") ? "#fff8e1" : "#fff", color: (vendor.starred_by || []).includes(profile?.saleperson || "") ? "#f9a825" : "#999", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
                                                         {(vendor.starred_by || []).includes(profile?.saleperson || "") ? "\u2605" : "\u2606"}
                                                     </button>
+                                                    <button className="merch-pay-open" onClick={(e) => { e.stopPropagation(); setPayVendor(vendor); }}>{"\u20B9"} Record payment</button>
                                                     <button onClick={(e) => handleEditVendor(vendor, e)} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #d5b85a", background: "#fff", color: "#8b7240", fontWeight: 600, cursor: "pointer", fontSize: 12 }}>{"\u270E"} Edit</button>
                                                 </div>
                                             </div>
@@ -1625,6 +1635,7 @@ export default function B2bMerchandiserDashboard() {
                             {analyticsPeriodControl}
                         </div>
                         <PostDispatchAnalytics actions={postDispatchActions} orders={orders} vendorMap={vendorMap} inPeriod={inAnalyticsPeriod} />
+                        <MerchAnalytics orders={orders} vendorMap={vendorMap} componentsByOrder={componentsByOrder} inPeriod={inAnalyticsPeriod} periodName={periodLabel(analyticsTimeline)} />
 
                         {vendorGrowthStats.length === 0 ? (
                             <div className="merch-ios-card" style={{ textAlign: 'center', color: '#999', padding: 32 }}>No vendor data for this period</div>
@@ -1811,6 +1822,22 @@ export default function B2bMerchandiserDashboard() {
                     orderNo={journeyOrder.order_no}
                     components={journeyOrder.components}
                     onClose={() => setJourneyOrder(null)}
+                />
+            )}
+            {payVendor && (
+                <VendorPaymentModal
+                    vendor={payVendor}
+                    orders={orders}
+                    userEmail={user?.email || ""}
+                    showPopup={showPopup}
+                    onClose={() => setPayVendor(null)}
+                    onRecorded={({ fresh, vendorPatch }) => {
+                        if (fresh?.length) {
+                            const byId = Object.fromEntries(fresh.map(f => [f.id, f]));
+                            setOrders(prev => prev.map(o => byId[o.id] ? { ...o, ...byId[o.id] } : o));
+                        }
+                        if (vendorPatch) setVendors(prev => prev.map(v => v.id === vendorPatch.id ? { ...v, ...vendorPatch } : v));
+                    }}
                 />
             )}
             {paymentOrder && (
