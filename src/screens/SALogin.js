@@ -79,6 +79,9 @@ export default function SALogin() {
         navigate("/head-of-design-dashboard")
       } else if (userRecord.role === "scan_station") {
         navigate("/scan-station")
+      } else if (userRecord.role === "store_gate") {
+        // Store gate guard (Delhi / Ludhiana): scans pieces in and out of the store.
+        navigate("/store-gate")
       } else if (userRecord.role === "gm") {
         navigate("/gm-dashboard")
       } else if (userRecord.role === "retail_manager") {
