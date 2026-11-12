@@ -58,7 +58,9 @@ function FactsPivot({ facts, rowsBy, locationOrder }) {
   );
 }
 
-export default function ProductDetail({ row, view, warehousesById, salesDays = 90, onClose, openAction, canWrite, canEditProducts, openEditor }) {
+// openLabels: Stock Room only — print piece labels (Release 35).
+// piece: a scanned label (SA dashboard, Release 35) — shown above the details.
+export default function ProductDetail({ row, view, warehousesById, salesDays = 90, onClose, openAction, canWrite, canEditProducts, openEditor, openLabels, piece }) {
   const p = row.product;
   const ledger = view.ledger;
   const salesBySize = useMemo(() => (view.sales && view.sales.byProduct[row.id] ? view.sales.byProduct[row.id].bySize : {}), [view.sales, row.id]);
@@ -135,8 +137,26 @@ export default function ProductDetail({ row, view, warehousesById, salesDays = 9
 
   return (
     <Modal title={p.name} meta={meta} thumb={p.image_url} onClose={onClose}>
-      {(canEditProducts || (canWrite && counted)) && (
+      {piece && (
+        <p className={`sr-callout ${piece.status === "available" ? "is-info" : "is-warn"}`}>
+          <Icon name={piece.status === "available" ? "pin" : "alert"} width={1.8} />
+          <span style={{ flex: 1 }}>
+            Scanned <b className="sr-mono">{piece.code}</b> · {piece.colour}{piece.colour_type === "CT" ? " (custom colour)" : ""} · size {piece.size}
+            {piece.mrp ? <> · MRP {formatInr(piece.mrp)}</> : null}
+            {" · "}
+            {piece.status === "available" && "available"}
+            {piece.status === "held" && `held by ${piece.held_by_name || piece.held_by || "an SA"}${piece.held_store ? ` (${piece.held_store})` : ""}${piece.held_until ? ` until ${new Date(piece.held_until).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}` : ""}`}
+            {piece.status === "sold" && `sold on ${piece.sold_order_no || "an order"}`}
+            {piece.status === "void" && "label cancelled"}
+          </span>
+        </p>
+      )}
+
+      {(canEditProducts || (canWrite && counted) || openLabels) && (
         <div className="sr-detail-actions">
+          {openLabels && (
+            <button type="button" className="sr-btn" onClick={() => openLabels(row.id)}>Print labels</button>
+          )}
           {canWrite && counted && (
             <>
               <button type="button" className="sr-btn sr-btn-primary" onClick={() => openAction("receive", { lines: [{ ...product, size: sizes[0] || "", qty: 1 }] })}><Icon name="plus" width={2} />Receive</button>

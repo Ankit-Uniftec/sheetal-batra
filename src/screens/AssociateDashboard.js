@@ -31,6 +31,8 @@ import { poolsForUser } from "../utils/stockVisibility";
 import { startOrderMode, clearOrderMode } from "../utils/orderMode";
 import { usePeriodFilter } from "../components/PeriodFilter";
 import DashboardHeader from "../components/DashboardHeader";
+import SaInventory from "./StockRoom/SaInventory";
+import { releaseAllHeld } from "../utils/stockPieces";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -66,6 +68,9 @@ export default function Dashboard() {
   const { showPopup, PopupComponent } = usePopup();
 
   const [activeTab, setActiveTab] = useTabParam("dashboard");
+  // Release 35: back on the dashboard = the order in progress was left, so any
+  // piece it scanned goes back on sale now instead of waiting for the hold to run out.
+  useEffect(() => { releaseAllHeld(); }, []);
   const [salesperson, setSalesperson] = useState(null);
   // Exhibition SA: store/designation = "Exhibition". Drives the Exhibitions
   // menu + gating of the regular "+" order journey (points 1 & 2).
@@ -1342,6 +1347,7 @@ export default function Dashboard() {
               <a className={`ad-menu-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Book</a>
               <a className={`ad-menu-item ${activeTab === "walkin" ? "active" : ""}`} onClick={() => { setActiveTab("walkin"); setShowSidebar(false); }}>Walk-In</a>
               <a className={`ad-menu-item ${activeTab === "stock" ? "active" : ""}`} onClick={() => { setActiveTab("stock"); setShowSidebar(false); }}>Stock</a>
+              <a className={`ad-menu-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</a>
               {isExhibition && (
                 <a className={`ad-menu-item ${activeTab === "exhibitions" ? "active" : ""}`} onClick={() => { setActiveTab("exhibitions"); setShowSidebar(false); }}>Exhibitions</a>
               )}
@@ -2032,6 +2038,12 @@ export default function Dashboard() {
           {activeTab === "stock" && (
             <div style={{ gridColumn: "2 / -1" }}>
               <StockPanel pools={poolsForUser(salesperson)} />
+            </div>
+          )}
+
+          {activeTab === "inventory" && (
+            <div style={{ gridColumn: "2 / -1", minWidth: 0 }}>
+              <SaInventory />
             </div>
           )}
 

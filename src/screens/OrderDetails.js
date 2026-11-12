@@ -14,6 +14,7 @@ import { STORE_ADDRESSES } from "../utils/shippingAddress";
 import AdvanceProofPicker from "../components/AdvanceProofPicker";
 import { advanceProofParts } from "../utils/paymentProofs";
 import { isOrderMode } from "../utils/orderMode";
+import useStockHoldKeepAlive from "../hooks/useStockHoldKeepAlive";
 
 const countryOptions = [
   { label: "India", value: "India" },
@@ -55,6 +56,7 @@ const fetchIndiaAddressByPincode = async (pincode) => {
 
 
 export default function OrderDetails() {
+  useStockHoldKeepAlive(); // Release 35: scanned pieces stay held while the order is open
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();

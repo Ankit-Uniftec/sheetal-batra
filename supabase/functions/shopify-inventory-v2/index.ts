@@ -26,9 +26,16 @@ import {
 //       Send a failed change again.
 //   { action: "sync" }                                         scheduled job only
 //       Refresh designs sold on the website since the last run plus a
-//       rotating batch, so Shopify-side changes reach the app.
-//   Add "dry_run": true to fetch/adjust/set to do every read and return the
-//   plan without writing to Shopify or the database.
+//       rotating batch, so Shopify-side changes reach the app. Also releases
+//       expired piece holds (Release 35) and puts their Shopify count back.
+//   { action: "hold",    code }                                any staff
+//       Release 35: a scanned piece label (NAS-RED-ST-L-001). Holds the piece
+//       for HOLD_MINUTES and lowers Shopify by 1 (LXRTS) so no one else can
+//       sell it. Returns the piece, its product and the result.
+//   { action: "release", code, force? }                        holder (force: SET_ROLES)
+//       Puts a held piece back on sale and Shopify back up by 1.
+//   Add "dry_run": true to fetch/adjust/set/hold to do every read and return
+//   the plan without writing to Shopify or the database.
 //
 // Webhook (optional, OFF until SHOPIFY_INVENTORY_WEBHOOK_SECRET is set):
 //   Shopify "inventory_levels/update" — used as a trigger only: the design is
@@ -306,6 +313,93 @@ async function write(input: WriteInput) {
   return { success: false, error: "Stock kept changing on Shopify; try again.", log_id: logId };
 }
 
+// ─── Piece holds (Release 35) ───────────────────────────────
+
+const HOLD_MINUTES = 30;
+const PIECE_PRODUCT_COLS = "id, name, sku_id, base_price, image_url, sync_enabled, is_custom_piece, default_color, available_size, shopify_product_id";
+
+/** True when the piece table has not been created yet (SQL not run). */
+const missingPieces = (e: any) => !!e && (e.code === "PGRST202" || e.code === "PGRST205" || e.code === "42P01" || /does not exist|schema cache/i.test(e.message || ""));
+
+async function holdPiece(rawCode: unknown, user: { email: string; role: string }, dryRun: boolean) {
+  const code = String(rawCode || "").trim().toUpperCase();
+  if (!code) return { success: false, error: "No label code was scanned." };
+  const { data: sp } = await supabase.from("salesperson").select("*").eq("email", user.email).maybeSingle();
+  const name = (sp as any)?.saleperson || "";
+  const store = (sp as any)?.store_name || (sp as any)?.store || "";
+
+  let result: any;
+  if (dryRun) {
+    // Local copy of the app: read only, say what a real scan would do.
+    const { data: piece, error } = await supabase.from("stock_pieces").select("*").eq("code", code).maybeSingle();
+    if (error) return { success: false, error: missingPieces(error) ? "Piece labels are not set up yet (run the Release 35 SQL)." : error.message };
+    if (!piece) result = { result: "not_found" };
+    else {
+      const { data: kp } = await supabase.from("products").select("sync_enabled, is_custom_piece").eq("id", piece.product_id).maybeSingle();
+      const kind = kp?.sync_enabled ? "lxrts" : kp?.is_custom_piece ? "custom" : "mto";
+      const busy = piece.status === "held" && new Date(piece.held_until) > new Date() && piece.held_by !== user.email;
+      result = {
+        piece, kind, need_shopify: false,
+        result: piece.status === "sold" || piece.status === "void" ? piece.status : kind === "mto" ? "sample" : busy ? "held_by_other" : "held",
+      };
+    }
+  } else {
+    const { data, error } = await supabase.rpc("stock_piece_hold", { p_code: code, p_email: user.email, p_name: name, p_store: store, p_minutes: HOLD_MINUTES });
+    if (error) return { success: false, error: missingPieces(error) ? "Piece labels are not set up yet (run the Release 35 SQL)." : error.message };
+    result = data;
+  }
+  if (result.result === "not_found") return { success: true, result: "not_found", code };
+
+  const piece = result.piece;
+  const { data: product } = await supabase.from("products").select(PIECE_PRODUCT_COLS).eq("id", piece.product_id).maybeSingle();
+
+  let shopify: { ok: boolean; error?: string } | null = null;
+  if (!dryRun && result.need_shopify) {
+    const w = await write({ action: "adjust", productId: piece.product_id, size: piece.size, change: -1, source: "scan-hold", orderNo: code, user });
+    if (w.success) {
+      await supabase.rpc("stock_piece_set_stock_held", { p_code: code });
+      piece.stock_held = true;
+      shopify = { ok: true };
+    } else {
+      // The piece is still held for this SA (no other SA can scan it); only
+      // the website was not told. The order will lower Shopify as usual.
+      shopify = { ok: false, error: w.error };
+    }
+  }
+  return { success: true, result: result.result, kind: result.kind, piece, product, shopify, hold_minutes: HOLD_MINUTES, dry_run: dryRun || undefined };
+}
+
+async function releasePiece(rawCode: unknown, user: { email: string; role: string }, force: boolean, dryRun: boolean) {
+  const code = String(rawCode || "").trim().toUpperCase();
+  if (!code) return { success: false, error: "code is required." };
+  if (force && !SET_ROLES.includes(user.role)) return { success: false, error: "You are not allowed to release another person's hold." };
+  if (dryRun) return { success: true, dry_run: true, released: false };
+  const { data, error } = await supabase.rpc("stock_piece_release", { p_code: code, p_email: user.email, p_force: force });
+  if (error) return { success: false, error: error.message };
+  let shopify: unknown = null;
+  if (data?.released && data.kind === "lxrts" && data.stock_held) {
+    const w = await write({ action: "adjust", productId: data.product_id, size: data.size, change: 1, source: "scan-release", orderNo: code, user });
+    shopify = w.success ? { ok: true } : { ok: false, error: w.error };
+  }
+  return { success: true, ...data, shopify };
+}
+
+/** Expired holds → back on sale, Shopify +1 each. Never throws. */
+async function releaseExpiredHolds() {
+  try {
+    const { data, error } = await supabase.rpc("stock_pieces_release_expired");
+    if (error) { if (!missingPieces(error)) console.error("release expired holds:", error.message); return 0; }
+    for (const row of data || []) {
+      const w = await write({ action: "adjust", productId: row.product_id, size: row.size, change: 1, source: "scan-hold-expired", orderNo: row.code, user: null });
+      if (!w.success) console.error(`hold expiry +1 failed for ${row.code}:`, w.error);
+    }
+    return (data || []).length;
+  } catch (e) {
+    console.error("release expired holds:", (e as Error).message);
+    return 0;
+  }
+}
+
 // ─── Scheduled sync ─────────────────────────────────────────
 
 async function runSync() {
@@ -319,6 +413,7 @@ async function runSync() {
   if (!lock) return { success: true, skipped: "another sync run is still going" };
 
   try {
+    const holdsReleased = await releaseExpiredHolds();
     const since = new Date((lock.last_run_at ? new Date(lock.last_run_at).getTime() : now.getTime() - 10 * 60_000) - 2 * 60_000);
     const { data: orders } = await supabase.from("orders").select("items")
       .like("order_no", "SB-SHOP%")
@@ -348,7 +443,7 @@ async function runSync() {
       last_checked: targets.length, last_changed: changed,
       last_error: problems.length ? problems.slice(0, 20).join(" | ") : (stoppedEarly ? "Stopped early to stay within Shopify's API limit" : null),
     }).eq("id", 1);
-    return { success: true, checked: targets.length, sold: sold.length, changed, stoppedEarly, problems: problems.length };
+    return { success: true, checked: targets.length, sold: sold.length, changed, stoppedEarly, problems: problems.length, holdsReleased };
   } catch (e) {
     await supabase.from("shopify_stock_sync_state").update({ running_until: null, last_run_at: now.toISOString(), last_error: (e as Error).message }).eq("id", 1);
     throw e;
@@ -440,6 +535,16 @@ Deno.serve(async (req) => {
       return json(result, result.success ? 200 : 400);
     }
 
+    if (action === "hold") {
+      const result = await holdPiece(body.code, user, dryRun);
+      return json(result, result.success ? 200 : 400);
+    }
+
+    if (action === "release") {
+      const result = await releasePiece(body.code, user, body.force === true, dryRun);
+      return json(result, result.success ? 200 : 400);
+    }
+
     if (action === "retry") {
       if (!SET_ROLES.includes(user.role)) return json({ error: "You are not allowed to retry Shopify changes." }, 403);
       const { data: row } = await supabase.from("shopify_stock_log").select("*").eq("id", body.log_id).maybeSingle();
@@ -455,7 +560,7 @@ Deno.serve(async (req) => {
       return json(result, result.success ? 200 : 400);
     }
 
-    return json({ error: "Unknown action. Use fetch, adjust, set, retry or sync." }, 400);
+    return json({ error: "Unknown action. Use fetch, adjust, set, retry, hold, release or sync." }, 400);
   } catch (e) {
     console.error("shopify-inventory-v2:", (e as Error).message);
     return json({ error: (e as Error).message }, 500);

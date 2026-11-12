@@ -1,5 +1,6 @@
 import config from "../config/config";
 import { supabase } from "../lib/supabaseClient";
+import { getStaffToken } from "./staffSession";
 
 // ============================================================
 // LXRTS stock on Shopify — the ONE place the app talks to it.
@@ -49,16 +50,20 @@ export function normalizeShopifyId(value, type = "Product") {
 
 const endpoint = () => `${config.SUPABASE_URL}/functions/v1/shopify-inventory-v2`;
 
-async function call(body) {
+async function call(body, tokenOverride) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return { ok: false, error: "Please sign in again." };
+    // Release 35: always as the STAFF member. Inside the order flow the live
+    // session is the customer's (OTP step), which the function refuses — so the
+    // order form's stock read and the order's Shopify -1 used to fail quietly.
+    // Outside an order getStaffToken() is simply the live session.
+    const accessToken = tokenOverride || await getStaffToken();
+    if (!accessToken) return { ok: false, error: "Please sign in again." };
     const response = await fetch(endpoint(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: config.SUPABASE_KEY,
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(SHOPIFY_DRY_RUN && body.action !== "retry" ? { ...body, dry_run: true } : body),
     });
@@ -148,4 +153,19 @@ export async function loadShopifySyncState() {
   const { data, error } = await supabase.from("shopify_stock_sync_state").select("*").eq("id", 1).maybeSingle();
   if (error) return null;
   return data;
+}
+
+/**
+ * Release 35: hold a scanned piece label (NAS-RED-ST-L-001) for this SA.
+ * LXRTS: Shopify goes down by 1 while it is held. Local dev: dry run (reads only).
+ * @returns {Promise<{ ok, result?, kind?, piece?, product?, shopify?, hold_minutes?, error? }>}
+ *   result: held | mine | sample | held_by_other | sold | void | not_found
+ */
+export async function holdStockPiece(code) {
+  return call({ action: "hold", code });
+}
+
+/** Release 35: put a held piece back on sale (Shopify +1 for LXRTS). */
+export async function releaseStockPiece(code, { force = false } = {}) {
+  return call({ action: "release", code, force });
 }

@@ -3,6 +3,8 @@ import { supabase } from "../lib/supabaseClient";
 import CustomerOrderPdf from "../pdf/CustomerOrderPdf";
 import WarehouseOrderPdf from "../pdf/WarehouseOrderPdf";
 import SkuBarcodeSheetPdf from "../pdf/SkuBarcodeSheetPdf";
+import PieceLabelPdf from "../pdf/PieceLabelPdf";
+import { labelNameParts } from "./stockPieces";
 import {
   fetchLabelTemplate,
   labelProductsBySku,
@@ -11,7 +13,7 @@ import {
 // Full-resolution copy reserved for PDF embedding — logo.png (used by screens)
 // is downscaled for the web and must not end up inside generated PDFs.
 import Logo from "../images/logo-pdf.png";
-import { generateOrderBarcodeImages, generateLabelBarcodeDataUrl } from "./barcodeImageUtils";
+import { generateOrderBarcodeImages, generateLabelBarcodeDataUrl, generateBarcodeDataUrl } from "./barcodeImageUtils";
 import { ensureOrderComponents } from "./barcodeService";
 
 // Resolves the "client name" for a PDF header. B2B orders have no
@@ -711,5 +713,34 @@ export const downloadSkuBarcodeSheet = async (skus, templateOverride) => {
   // and leave the user staring at a blank viewer.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 
+  return labels.length;
+};
+
+/**
+ * Release 35: open 50x50mm piece labels (one page per label) in a new tab.
+ * @param {Array} pieces  stock_pieces rows
+ * @param {Object} productsById  products rows by id (for the printed name)
+ */
+export const openPieceLabels = async (pieces, productsById) => {
+  const list = (pieces || []).filter((p) => p && p.code);
+  if (!list.length) throw new Error("No labels to print.");
+  const labels = list.map((p) => {
+    const product = productsById?.[p.product_id] || {};
+    const { title, description } = labelNameParts(product.name, p.colour);
+    const mrp = Number(p.mrp ?? product.base_price) || 0;
+    return {
+      code: p.code,
+      title,
+      description,
+      colour: p.colour,
+      size: p.size,
+      mrp: mrp > 0 ? Math.round(mrp).toLocaleString("en-IN") : "",
+      image: generateBarcodeDataUrl(p.code, { width: 2, height: 60, displayValue: false, margin: 0 }),
+    };
+  });
+  const blob = await pdf(<PieceLabelPdf labels={labels} />).toBlob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
   return labels.length;
 };
