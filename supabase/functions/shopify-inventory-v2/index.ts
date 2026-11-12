@@ -34,6 +34,10 @@ import {
 //       sell it. Returns the piece, its product and the result.
 //   { action: "release", code, force? }                        holder (force: SET_ROLES)
 //       Puts a held piece back on sale and Shopify back up by 1.
+//   { action: "catalogue", cursor? }                           SET_ROLES only
+//       Release 36, READ ONLY: one page of Shopify products (title, handle,
+//       status, tags, sizes with variant ids, price and stock). Call again with
+//       the returned next_cursor until it is null.
 //   Add "dry_run": true to fetch/adjust/set/hold to do every read and return
 //   the plan without writing to Shopify or the database.
 //
@@ -313,6 +317,44 @@ async function write(input: WriteInput) {
   return { success: false, error: "Stock kept changing on Shopify; try again.", log_id: logId };
 }
 
+// ─── Catalogue read (Release 36, read only) ─────────────────
+
+const CATALOGUE_QUERY = `query catalogue($after: String) {
+  products(first: 25, after: $after, sortKey: TITLE) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      id title handle status productType tags totalInventory
+      variants(first: 30) {
+        nodes { id title price sku selectedOptions { name value } inventoryItem { id ${LEVEL_FIELDS} } }
+      }
+    }
+  }
+}`;
+
+/** Up to `pages` pages of 25 products from `cursor`. Writes nothing. */
+async function readCatalogue(cursor: string | null, pages = 8) {
+  const products: unknown[] = [];
+  let after = cursor;
+  for (let i = 0; i < pages; i++) {
+    const r = await shopify(CATALOGUE_QUERY, { after });
+    if (throttled(r)) return { products, next_cursor: after, throttled: true };
+    if (r.errors?.length) throw new Error(r.errors[0]?.message || "Shopify read failed");
+    const page = r.data?.products;
+    for (const p of page?.nodes || []) {
+      products.push({
+        id: p.id, title: p.title, handle: p.handle, status: p.status, type: p.productType,
+        tags: p.tags, total: p.totalInventory,
+        sizes: readingsFromProduct(p, LOCATION_ID).map((x) => ({ size: x.size, variant_id: x.variantId, price: x.price, available: x.available, error: x.error })),
+      });
+    }
+    if (!page?.pageInfo?.hasNextPage) return { products, next_cursor: null };
+    after = page.pageInfo.endCursor;
+    const left = r.extensions?.cost?.throttleStatus?.currentlyAvailable;
+    if (typeof left === "number" && left < 400) return { products, next_cursor: after, throttled: true };
+  }
+  return { products, next_cursor: after };
+}
+
 // ─── Piece holds (Release 35) ───────────────────────────────
 
 const HOLD_MINUTES = 30;
@@ -535,6 +577,11 @@ Deno.serve(async (req) => {
       return json(result, result.success ? 200 : 400);
     }
 
+    if (action === "catalogue") {
+      if (!SET_ROLES.includes(user.role)) return json({ error: "You are not allowed to read the Shopify catalogue." }, 403);
+      return json({ success: true, ...(await readCatalogue(body.cursor ? String(body.cursor) : null)) });
+    }
+
     if (action === "hold") {
       const result = await holdPiece(body.code, user, dryRun);
       return json(result, result.success ? 200 : 400);
@@ -560,7 +607,7 @@ Deno.serve(async (req) => {
       return json(result, result.success ? 200 : 400);
     }
 
-    return json({ error: "Unknown action. Use fetch, adjust, set, retry, hold, release or sync." }, 400);
+    return json({ error: "Unknown action. Use fetch, adjust, set, retry, hold, release, catalogue or sync." }, 400);
   } catch (e) {
     console.error("shopify-inventory-v2:", (e as Error).message);
     return json({ error: (e as Error).message }, 500);
