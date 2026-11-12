@@ -17,6 +17,11 @@ import { fetchShopifyInventory } from "../utils/shopifyInventory";
 import { isOrderMode } from "../utils/orderMode";
 import { STOCK_HEAD_OPTIONS, isValidStockHeadDesignation } from "../utils/stockProductionHead";
 import { chartValueSet, measurementsForSize } from "../utils/b2bSizeChart";
+import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
+import useStockHoldKeepAlive from "../hooks/useStockHoldKeepAlive";
+import { holdStockPiece, releaseStockPiece } from "../utils/shopifyInventory";
+import { scanProblem, writeHeldCodes } from "../utils/stockPieces";
+import { canonicalSize } from "./StockRoom/stockRoomModel";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -706,6 +711,19 @@ export default function ProductForm() {
   // const [isRestored, setIsRestored] = useState(false);
   const isRestoredRef = useRef(false);
 
+  // ==================== RELEASE 35: SCAN A PIECE LABEL ====================
+  // Scanning a label (NAS-RED-ST-L-001) picks the product and fills size and
+  // colour. An LXRTS / custom piece is HELD for this SA (no one else can sell
+  // it; LXRTS also comes off Shopify) until the order is placed or the line is
+  // removed; a made-to-order sample only fills the form.
+  useStockHoldKeepAlive();
+  const [scannedPiece, setScannedPiece] = useState(null); // { code, productId, size, colour, kind, stockHeld, heldUntil }
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanBoxOpen, setScanBoxOpen] = useState(false);
+  const [scanText, setScanText] = useState("");
+  const [variantsReadyFor, setVariantsReadyFor] = useState(null);
+  const pendingScanRef = useRef(null);
+
   // tiny id helper so list keys are stable
   const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
@@ -729,8 +747,12 @@ export default function ProductForm() {
     }
   };
 
-  const handleDelete = (id) =>
+  const handleDelete = (id) => {
+    // Release 35: removing a scanned line puts the piece back on sale.
+    const gone = orderItems.find((it) => it._id === id);
+    if (gone?.stock_piece_code && gone.stock_piece_kind !== "mto") releaseStockPiece(gone.stock_piece_code).catch(() => null);
     setOrderItems((prev) => prev.filter((it) => it._id !== id));
+  };
 
   // Determine order type for an item (Custom or Standard)
   const getItemOrderType = (item) => {
@@ -1517,6 +1539,7 @@ export default function ProductForm() {
         setIsSyncProduct(false);
         setProductVariants([]);
         setLocalInventory({});
+        setVariantsReadyFor(selectedProduct?.id || null);
         return;
       }
 
@@ -1604,6 +1627,7 @@ export default function ProductForm() {
         console.error("Error fetching variants:", err);
       } finally {
         setSyncLoading(false);
+        setVariantsReadyFor(selectedProduct.id);
       }
     };
 
@@ -1929,6 +1953,123 @@ export default function ProductForm() {
     });
   }, [selectedProduct, selectedTop, selectedBottom]);
 
+  // ==================== RELEASE 35: SCAN HANDLING ====================
+  const scanAllowed = !isStockOrder && !isCommsOrder;
+  const sameSize = (a, b) => canonicalSize(a) === canonicalSize(b);
+
+  // Codes this order holds, for the keep-alive and the review screen.
+  useEffect(() => {
+    const codes = orderItems.filter((it) => it.stock_piece_code && it.stock_piece_kind !== "mto").map((it) => it.stock_piece_code);
+    if (scannedPiece && scannedPiece.kind !== "mto") codes.push(scannedPiece.code);
+    writeHeldCodes(codes);
+  }, [orderItems, scannedPiece]);
+
+  const dropScannedPiece = (piece = scannedPiece) => {
+    if (!piece) return;
+    if (piece.kind !== "mto") releaseStockPiece(piece.code).catch(() => null);
+    setScannedPiece((cur) => (cur && cur.code === piece.code ? null : cur));
+  };
+
+  const handlePieceScan = async (rawCode) => {
+    const code = String(rawCode || "").trim().toUpperCase();
+    if (!code || scanBusy) return;
+    if (!scanAllowed) {
+      showPopup({ title: "Scan not available", message: "Piece labels can't be scanned on stock or Comms orders.", type: "warning" });
+      return;
+    }
+    if (orderItems.some((it) => String(it.stock_piece_code || "").toUpperCase() === code) || scannedPiece?.code === code) {
+      showPopup({ title: "Already scanned", message: `${code} is already in this order.`, type: "warning" });
+      return;
+    }
+    setScanBusy(true);
+    try {
+      const r = await holdStockPiece(code);
+      if (!r.ok) {
+        showPopup({ title: "Scan failed", message: r.error || "The label could not be checked. Try again.", type: "error" });
+        return;
+      }
+      const problem = scanProblem({ ...r, code });
+      if (problem) {
+        showPopup({ ...problem, type: "warning" });
+        return;
+      }
+      const piece = r.piece;
+      let product = products.find((pr) => pr.id === piece.product_id);
+      if (!product) {
+        const { data } = await supabase.from("products_live").select("*, product_extra_prices (*)").eq("id", piece.product_id).maybeSingle();
+        product = data;
+      }
+      if (!product) {
+        if (r.kind !== "mto") releaseStockPiece(code).catch(() => null);
+        showPopup({ title: "Product not on the order form", message: `${code} belongs to a design that is not live on the order form.`, type: "warning" });
+        return;
+      }
+      // A different piece scanned before this one and not added yet: put it back.
+      if (scannedPiece) dropScannedPiece(scannedPiece);
+
+      const next = {
+        code: piece.code, productId: product.id, size: piece.size, colour: piece.colour,
+        colourType: piece.colour_type, kind: r.kind, stockHeld: !!piece.stock_held,
+        heldUntil: piece.held_until, dryRun: !!r.dry_run,
+        shopifyError: r.shopify && !r.shopify.ok ? r.shopify.error : null,
+      };
+      pendingScanRef.current = next;
+      setScannedPiece(next);
+      setIsCustomPieceMode(product.is_custom_piece === true);
+      if (product.sync_enabled || product.is_custom_piece) { setIsKidsProduct(false); setIsMenProduct(false); }
+      // Same design scanned again: a fresh object still re-runs the fill below.
+      setSelectedProduct(selectedProduct?.id === product.id ? { ...product } : product);
+      setScanBoxOpen(false);
+      setScanText("");
+      if (next.shopifyError) {
+        showPopup({
+          title: "Held, but the website was not updated",
+          message: `${code} is held for you. Shopify could not be lowered (${next.shopifyError}); the order will lower it when placed.`,
+          type: "warning",
+        });
+      }
+    } finally {
+      setScanBusy(false);
+    }
+  };
+
+  useBarcodeScanner({ onScan: handlePieceScan, enabled: scanAllowed && !scanBusy });
+
+  // Fill size and colour once the product's sizes are known.
+  useEffect(() => {
+    const pending = pendingScanRef.current;
+    if (!pending || !selectedProduct || selectedProduct.id !== pending.productId) return;
+    if (selectedProduct.sync_enabled && (syncLoading || variantsReadyFor !== pending.productId)) return;
+    pendingScanRef.current = null;
+
+    const match = (availableSizes || []).find((sz) => sameSize(sz, pending.size));
+    const size = match || pending.size;
+    if (!match) setAvailableSizes((prev) => [...(prev || []), size]);
+    // This SA's own hold took the piece off the count the form just read.
+    if (selectedProduct.sync_enabled && pending.stockHeld) {
+      setLocalInventory((prev) => ({ ...prev, [size]: (prev[size] || 0) + 1 }));
+    }
+    setSelectedSize(size);
+    setQuantity(1);
+    const colourObj = colors.find((c) => String(c.name).toLowerCase() === String(pending.colour || "").toLowerCase())
+      || { name: pending.colour || "", hex: "" };
+    if (colourObj.name) {
+      setSelectedColor(colourObj);
+      setSelectedTopColor((cur) => (selectedProduct.top_options?.length || cur?.name ? colourObj : cur));
+      setSelectedBottomColor((cur) => (selectedProduct.bottom_options?.length || cur?.name ? colourObj : cur));
+    }
+  }, [selectedProduct, availableSizes, syncLoading, variantsReadyFor, colors]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** The scanned piece's fields for a line being added, or an error message. */
+  const scannedPieceFields = () => {
+    if (!scannedPiece || !selectedProduct || scannedPiece.productId !== selectedProduct.id) return { fields: {} };
+    if (!sameSize(scannedPiece.size, selectedSize)) {
+      return { error: `The scanned piece ${scannedPiece.code} is size ${scannedPiece.size}. Set the size back to ${scannedPiece.size}, or remove the scan.` };
+    }
+    if (Number(quantity) !== 1) return { error: "A scanned piece is one garment. Set the quantity to 1 (scan each piece separately)." };
+    return { fields: { stock_piece_code: scannedPiece.code, stock_piece_kind: scannedPiece.kind } };
+  };
+
 
   // ADD PRODUCT
   const handleAddProduct = async () => {
@@ -2102,7 +2243,14 @@ export default function ProductForm() {
       }
     }
 
+    const scanned = scannedPieceFields();
+    if (scanned.error) {
+      showPopup({ title: "Scanned piece", message: scanned.error, type: "warning" });
+      return;
+    }
+
     const newProduct = {
+      ...scanned.fields,
       _id: makeId(),
       product_id: selectedProduct.id,
       product_name: selectedProduct.name,
@@ -2142,6 +2290,7 @@ export default function ProductForm() {
     };
 
     setOrderItems((prev) => [...prev, newProduct]);
+    if (scanned.fields.stock_piece_code) setScannedPiece(null); // the line now carries the piece
 
     // For sync products: decrease local inventory
     if (isSyncProduct) {
@@ -2700,7 +2849,13 @@ export default function ProductForm() {
           return;
         }
       }
+      const scanned = scannedPieceFields();
+      if (scanned.error) {
+        showPopup({ title: "Scanned piece", message: scanned.error, type: "warning" });
+        return;
+      }
       finalItems.push({
+        ...scanned.fields,
         _id: makeId(), // Ensure a unique ID for the item
         product_id: selectedProduct.id,
         product_name: selectedProduct.name,
@@ -2971,6 +3126,21 @@ export default function ProductForm() {
     <div className="screen4-bg pf-page">
       {/* Popup Component */}
       {PopupComponent}
+      {scanBoxOpen && (
+        <div className="pf-scan-overlay" onClick={() => setScanBoxOpen(false)}>
+          <form className="pf-scan-box" onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => { e.preventDefault(); handlePieceScan(scanText); }}>
+            <h3>Scan a piece label</h3>
+            <p>Point the scanner gun at the label, or type the code under the barcode.</p>
+            <input autoFocus className="input-line" value={scanText} placeholder="e.g. NAS-RED-ST-L-001"
+              onChange={(e) => setScanText(e.target.value.toUpperCase())} aria-label="Label code" />
+            <div className="pf-scan-actions">
+              <button type="button" onClick={() => setScanBoxOpen(false)}>Cancel</button>
+              <button type="submit" className="primary" disabled={!scanText.trim() || scanBusy}>{scanBusy ? "Checking\u2026" : "Find piece"}</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* HEADER */}
       <header className="pf-header">
@@ -3585,6 +3755,7 @@ export default function ProductForm() {
                       setSelectedBottomColor({ name: "", hex: "" });
                       setCustomMensPrice("");
                     }
+                    if (scannedPiece && next?.id !== scannedPiece.productId) dropScannedPiece();
                     setSelectedProduct(next);
                   }}
                   placeholder="Select Product"
@@ -3618,7 +3789,26 @@ export default function ProductForm() {
                   </p>
                 )}
                 {syncLoading && <p className="sync-loading">Loading inventory...</p>}
+                {scanAllowed && (
+                  <button type="button" className="pf-scan-btn" onClick={() => setScanBoxOpen(true)} disabled={scanBusy}
+                    title="Scan a piece label with the scanner gun, or type its code">
+                    {scanBusy ? "Checking…" : "Scan label"}
+                  </button>
+                )}
               </div>
+              {scannedPiece && (
+                <div className="pf-scan-chip" role="status">
+                  <span>
+                    Scanned <b>{scannedPiece.code}</b> {"·"} {scannedPiece.colour} {"·"} {scannedPiece.size}
+                    {scannedPiece.kind === "mto"
+                      ? " · made-to-order sample (nothing held)"
+                      : scannedPiece.dryRun
+                        ? " · test copy: not really held"
+                        : ` · held for you until ${scannedPiece.heldUntil ? new Date(scannedPiece.heldUntil).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—"} (kept while this order is open)`}
+                  </span>
+                  <button type="button" onClick={() => dropScannedPiece()}>Remove scan</button>
+                </div>
+              )}
 
               {/* COLOR */}
               {/* <div className="field" >

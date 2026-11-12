@@ -24,3 +24,6 @@ export const clearPdfUrls = async (...args) =>
 
 export const downloadSkuBarcodeSheet = async (...args) =>
   (await import("./pdfUtils")).downloadSkuBarcodeSheet(...args);
+
+export const openPieceLabels = async (...args) =>
+  (await import("./pdfUtils")).openPieceLabels(...args);

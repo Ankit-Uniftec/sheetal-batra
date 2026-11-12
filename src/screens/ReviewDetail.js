@@ -18,6 +18,8 @@ import { uploadPendingAdvanceProofs } from "../utils/pendingAdvanceProof";
 import { logShippingWaiver } from "../utils/shippingWaiver";
 import { advanceProofParts } from "../utils/paymentProofs";
 import { changeShopifyStock } from "../utils/shopifyInventory";
+import useStockHoldKeepAlive from "../hooks/useStockHoldKeepAlive";
+import { sellStockPieces, writeHeldCodes } from "../utils/stockPieces";
 
 // Auto Signature Logo URL
 const AUTO_SIGNATURE_URL = "https://qlqvchcvuwjnfranqcmx.supabase.co/storage/v1/object/public/signature/logo.png";
@@ -104,6 +106,7 @@ const checkEmptyFields = (obj, prefix = "") => {
 // ========== END DEBUG HELPERS ==========
 
 export default function ReviewDetail() {
+  useStockHoldKeepAlive(); // Release 35: scanned pieces stay held while the order is open
   const isSubmitting = React.useRef(false);
   const { showPopup, PopupComponent } = usePopup();
   const navigate = useNavigate();
@@ -845,8 +848,19 @@ export default function ReviewDetail() {
       // db/barcode_system/v2/71_stock_order_receipts.sql.
       const items = (isStockOrder ? [] : normalizedOrder.items || order.items || []);
 
+      // Release 35: scanned pieces become sold. A piece whose hold already
+      // lowered the stock (Shopify for LXRTS, products.inventory for a custom
+      // piece) is skipped below so the same garment is never taken off twice.
+      // Any failure here returns {} and the order lowers stock the old way.
+      const pieceCodes = items.map((it) => it.stock_piece_code).filter(Boolean);
+      const soldPieces = await sellStockPieces(pieceCodes, insertedOrder?.order_no);
+      writeHeldCodes([]);
+
       for (const item of items) {
         if (!item.product_id) {
+          continue;
+        }
+        if (item.stock_piece_code && soldPieces[String(item.stock_piece_code).toUpperCase()]?.stock_done) {
           continue;
         }
 

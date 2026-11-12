@@ -19,6 +19,7 @@ import IntegrityScreen from "./IntegrityScreen";
 import MovementsScreen, { TransfersScreen, ReceiveTransferForm } from "./MovementsScreen";
 import NoticeBoard, { NoticeRail, useNotices } from "./NoticeBoard";
 import ProductDetail from "./ProductDetail";
+import PieceLabels from "./PieceLabels";
 import StockActionForm from "./StockActionForm";
 import ProductEditor from "./ProductEditor";
 import ProductImport from "./ProductImport";
@@ -428,7 +429,11 @@ export default function StockRoom() {
       {productRow && (
         <ProductDetail row={productRow} view={view} warehousesById={warehousesById} salesDays={salesDays} onClose={() => setProductId(null)}
           openAction={(mode, initial) => { setProductId(null); openAction(mode, initial); }}
-          canWrite={canWriteStock} canEditProducts={canEditProducts} openEditor={openEditor} />
+          canWrite={canWriteStock} canEditProducts={canEditProducts} openEditor={openEditor}
+          openLabels={(id) => { setProductId(null); setDialog({ kind: "labels", productId: id }); }} />
+      )}
+      {dialog?.kind === "labels" && view.rowsById[dialog.productId] && (
+        <PieceLabels row={view.rowsById[dialog.productId]} onClose={() => setDialog(null)} notify={(text) => setToast({ text })} />
       )}
 
       {dialog?.kind === "action" && (

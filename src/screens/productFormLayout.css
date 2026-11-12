@@ -192,3 +192,34 @@
     grid-column: span 1;
   }
 }
+
+/* Release 35: scan a piece label */
+.pf-scan-btn {
+  min-height: 40px; padding: 0 14px; border: 1px solid #d5b85a; border-radius: 8px;
+  background: #fff; color: #8b7240; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.pf-scan-btn:hover:not(:disabled) { background: #fff8e6; }
+.pf-scan-btn:disabled { opacity: 0.6; cursor: wait; }
+.pf-scan-chip {
+  flex-basis: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border: 1px solid #d5b85a; border-radius: 8px; background: #fff8e6; color: #5c4a1f; font-size: 14px;
+}
+.pf-scan-chip button {
+  min-height: 32px; padding: 0 12px; border: 1px solid #c9a94a; border-radius: 6px; background: #fff; color: #8b7240; cursor: pointer;
+}
+.pf-scan-overlay {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.35); padding: 16px;
+}
+.pf-scan-box {
+  width: 100%; max-width: 420px; background: #fff; border-radius: 12px; padding: 22px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+.pf-scan-box h3 { margin: 0 0 6px; font-size: 18px; }
+.pf-scan-box p { margin: 0 0 14px; color: #666; font-size: 14px; }
+.pf-scan-box input { width: 100%; min-height: 40px; font-size: 16px; letter-spacing: 0.5px; }
+.pf-scan-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.pf-scan-actions button {
+  min-height: 40px; padding: 0 16px; border: 1px solid #d5b85a; border-radius: 8px; background: #fff; color: #8b7240; cursor: pointer;
+}
+.pf-scan-actions button.primary { background: #d5b85a; color: #fff; font-weight: 600; }
+.pf-scan-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
