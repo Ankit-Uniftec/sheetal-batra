@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import "./StockRoom.css";
 import "./SaInventory.css";
 import ProductDetail from "./ProductDetail";
+import PieceLabels from "./PieceLabels";
 import useStockRoomView from "./useStockRoomView";
 import { loadStockRoomCatalogue, loadSales, loadLedger } from "./stockRoomData";
 import { ProductCell, SizeSummary, SearchField, Seg, Badge, usePaged } from "./StockRoomUi";
@@ -40,6 +41,8 @@ export default function SaInventory() {
   const [scanMsg, setScanMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
+  const [labelsFor, setLabelsFor] = useState(null); // product id: Print labels window
+  const [note, setNote] = useState(null);
 
   useEffect(() => {
     let off = false;
@@ -137,9 +140,16 @@ export default function SaInventory() {
       )}
 
       {/* Windows go to <body>: inside the dashboard's grid they sit under its layers. */}
-      {(row || scanBox) && createPortal(<div className="sr sr-portal">{row && (
+      {note && <p className="sr-callout is-info" role="status">{note} <button type="button" className="sr-linkbtn" onClick={() => setNote(null)}>OK</button></p>}
+
+      {(row || scanBox || labelsFor) && createPortal(<div className="sr sr-portal">{labelsFor && view?.rowsById[labelsFor] && (
+        <PieceLabels row={view.rowsById[labelsFor]} canCancel={false} onClose={() => setLabelsFor(null)}
+          notify={(text) => { setNote(text); loadPieces().then((r) => setPieces(r.pieces)); }} />
+      )}
+      {row && (
         <ProductDetail row={row} view={view} warehousesById={{}} salesDays={90} onClose={() => setOpen(null)}
-          openAction={() => {}} canWrite={false} canEditProducts={false} openEditor={() => {}} piece={open.piece} />
+          openAction={() => {}} canWrite={false} canEditProducts={false} openEditor={() => {}} piece={open.piece}
+          openLabels={(id) => { setOpen(null); setLabelsFor(id); }} />
       )}
 
       {scanBox && (

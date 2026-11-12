@@ -21,7 +21,8 @@ const TYPES = [
 const STATUS_TONE = { available: "gold", held: "plain", sold: "plain", void: "plain" };
 const time = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
 
-export default function PieceLabels({ row, onClose, notify }) {
+// canCancel: Stock Room only (SAs print and reprint, but cannot cancel a label).
+export default function PieceLabels({ row, onClose, notify, canCancel = true }) {
   const p = row.product;
   const sizes = useMemo(() => sortSizes(row.stock.sizes || p.available_size || []).filter((sz) => /^[A-Za-z0-9]+$/.test(sizeLabel(sz))), [row, p]);
   const [colours, setColours] = useState([]);
@@ -165,7 +166,7 @@ export default function PieceLabels({ row, onClose, notify }) {
                     {x.status === "sold" && <span className="sr-muted"> {x.sold_order_no}</span>}
                   </td>
                   <td className="sr-muted">{time(x.created_at)}</td>
-                  <td>{x.status === "available" && <button type="button" className="sr-linkbtn" onClick={() => cancelLabel(x.code)}>Cancel label</button>}</td>
+                  <td>{canCancel && x.status === "available" && <button type="button" className="sr-linkbtn" onClick={() => cancelLabel(x.code)}>Cancel label</button>}</td>
                 </tr>
               ))}
             </tbody>
