@@ -173,7 +173,8 @@ export function planUpdates(rows: any[], readings: ReturnType<typeof readingsFro
     if (r) {
       if (r.error || r.available === null) { failed.push(`${row.size}: ${r.error || "no quantity"}`); continue; }
       target = r.available;
-      if (r.price !== null && row.price !== undefined && Number(row.price) !== r.price) fields.price = r.price;
+      // Release 36: prices are NOT copied from Shopify any more. The app sells at
+      // the client's catalogue price (products.base_price); Shopify only gives stock.
       if (r.inventoryItemId && row.shopify_inventory_item_id !== r.inventoryItemId) fields.shopify_inventory_item_id = r.inventoryItemId;
       if (toGid(row.shopify_variant_id, "ProductVariant") !== r.variantId) fields.shopify_variant_id = r.variantId;
     } else if (covered.has(sizeKey(row.size))) {
