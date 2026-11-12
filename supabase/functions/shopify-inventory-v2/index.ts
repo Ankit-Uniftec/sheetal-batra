@@ -462,7 +462,9 @@ async function runSync() {
       .or(`created_at.gte."${since.toISOString()}",updated_at.gte."${since.toISOString()}"`).limit(500);
     const sold = soldProductIds(orders || []);
 
-    const { data: synced } = await supabase.from("products").select("id").eq("sync_enabled", true);
+    // Only designs linked to Shopify (Release 36: LXRTS rows without a Shopify
+    // LXRTS product yet exist with 0 stock and are skipped, not reported).
+    const { data: synced } = await supabase.from("products").select("id").eq("sync_enabled", true).not("shopify_product_id", "is", null);
     const allIds = (synced || []).map((p: any) => p.id);
     const { batch, cursor } = nextBatch(allIds.filter((id: string) => !sold.includes(id)), lock.cursor, ROTATION_BATCH);
     const targets = [...new Set([...sold.filter((id) => allIds.includes(id)), ...batch])];
