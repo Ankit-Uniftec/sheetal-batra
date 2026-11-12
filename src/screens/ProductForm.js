@@ -22,6 +22,7 @@ import useStockHoldKeepAlive from "../hooks/useStockHoldKeepAlive";
 import { holdStockPiece, releaseStockPiece } from "../utils/shopifyInventory";
 import { scanProblem, writeHeldCodes } from "../utils/stockPieces";
 import { canonicalSize } from "./StockRoom/stockRoomModel";
+import CameraScanner, { prefersCamera } from "../components/CameraScanner";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -721,6 +722,10 @@ export default function ProductForm() {
   const [scanBusy, setScanBusy] = useState(false);
   const [scanBoxOpen, setScanBoxOpen] = useState(false);
   const [scanText, setScanText] = useState("");
+  const [cameraOn, setCameraOn] = useState(false);
+  // Stable for the camera (a new function each render would restart it).
+  const pieceScanRef = useRef(null);
+  const onCameraCode = useRef((code) => { setCameraOn(false); pieceScanRef.current?.(code); }).current;
   const [variantsReadyFor, setVariantsReadyFor] = useState(null);
   const pendingScanRef = useRef(null);
 
@@ -2020,6 +2025,7 @@ export default function ProductForm() {
       // Same design scanned again: a fresh object still re-runs the fill below.
       setSelectedProduct(selectedProduct?.id === product.id ? { ...product } : product);
       setScanBoxOpen(false);
+      setCameraOn(false);
       setScanText("");
       if (next.shopifyError) {
         showPopup({
@@ -2033,7 +2039,10 @@ export default function ProductForm() {
     }
   };
 
+  pieceScanRef.current = handlePieceScan;
   useBarcodeScanner({ onScan: handlePieceScan, enabled: scanAllowed && !scanBusy });
+  const openScanBox = () => { setScanText(""); setCameraOn(prefersCamera()); setScanBoxOpen(true); };
+  const closeScanBox = () => { setCameraOn(false); setScanBoxOpen(false); };
 
   // Fill size and colour once the product's sizes are known.
   useEffect(() => {
@@ -3127,15 +3136,22 @@ export default function ProductForm() {
       {/* Popup Component */}
       {PopupComponent}
       {scanBoxOpen && (
-        <div className="pf-scan-overlay" onClick={() => setScanBoxOpen(false)}>
+        <div className="pf-scan-overlay" onClick={closeScanBox}>
           <form className="pf-scan-box" onClick={(e) => e.stopPropagation()}
             onSubmit={(e) => { e.preventDefault(); handlePieceScan(scanText); }}>
             <h3>Scan a piece label</h3>
-            <p>Point the scanner gun at the label, or type the code under the barcode.</p>
-            <input autoFocus className="input-line" value={scanText} placeholder="e.g. NAS-RED-ST-L-001"
+            {cameraOn ? (
+              <CameraScanner onDetected={onCameraCode} />
+            ) : (
+              <button type="button" className="pf-scan-camera-btn" onClick={() => setCameraOn(true)} disabled={scanBusy}>
+                {scanBusy ? "Checking\u2026" : "Scan with camera"}
+              </button>
+            )}
+            <p>{cameraOn ? "Camera not working? Type the code under the barcode:" : "Or use the scanner gun, or type the code under the barcode:"}</p>
+            <input autoFocus={!cameraOn} className="input-line" value={scanText} placeholder="e.g. NAS-RED-ST-L-001"
               onChange={(e) => setScanText(e.target.value.toUpperCase())} aria-label="Label code" />
             <div className="pf-scan-actions">
-              <button type="button" onClick={() => setScanBoxOpen(false)}>Cancel</button>
+              <button type="button" onClick={closeScanBox}>Cancel</button>
               <button type="submit" className="primary" disabled={!scanText.trim() || scanBusy}>{scanBusy ? "Checking\u2026" : "Find piece"}</button>
             </div>
           </form>
@@ -3790,7 +3806,7 @@ export default function ProductForm() {
                 )}
                 {syncLoading && <p className="sync-loading">Loading inventory...</p>}
                 {scanAllowed && (
-                  <button type="button" className="pf-scan-btn" onClick={() => setScanBoxOpen(true)} disabled={scanBusy}
+                  <button type="button" className="pf-scan-btn" onClick={openScanBox} disabled={scanBusy}
                     title="Scan a piece label with the scanner gun, or type its code">
                     {scanBusy ? "Checking…" : "Scan label"}
                   </button>

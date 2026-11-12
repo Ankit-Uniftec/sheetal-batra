@@ -8,6 +8,7 @@ import { loadStockRoomCatalogue, loadSales, loadLedger } from "./stockRoomData";
 import { ProductCell, SizeSummary, SearchField, Seg, Badge, usePaged } from "./StockRoomUi";
 import { formatUnits, formatInr, TYPE_LABELS, TYPE_LXRTS, TYPE_CUSTOM } from "./stockRoomModel";
 import { useBarcodeScanner } from "../../hooks/useBarcodeScanner";
+import CameraScanner, { prefersCamera } from "../../components/CameraScanner";
 import { findPiece, loadPieces } from "../../utils/stockPieces";
 
 // ============================================================
@@ -38,6 +39,7 @@ export default function SaInventory() {
   const [scanText, setScanText] = useState("");
   const [scanMsg, setScanMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
 
   useEffect(() => {
     let off = false;
@@ -90,6 +92,7 @@ export default function SaInventory() {
   }, [busy, view]);
 
   useBarcodeScanner({ onScan, enabled: !!view && !busy });
+  const onCameraCode = useCallback((code) => { setCameraOn(false); onScan(code); }, [onScan]);
 
   const row = open && view ? view.rowsById[open.productId] : null;
 
@@ -100,7 +103,7 @@ export default function SaInventory() {
           <h2 className="sai-title">Inventory</h2>
           <span className="sr-muted">Ready pieces from the Stock Room. Scan a label with the scanner gun to see its details.</span>
         </div>
-        <button type="button" className="sr-btn sr-btn-primary" onClick={() => { setScanMsg(null); setScanBox(true); }}>Scan label</button>
+        <button type="button" className="sr-btn sr-btn-primary" onClick={() => { setScanMsg(null); setScanText(""); setCameraOn(prefersCamera()); setScanBox(true); }}>Scan label</button>
       </div>
 
       {error && <p className="sr-error" role="alert">{error}</p>}
@@ -145,12 +148,15 @@ export default function SaInventory() {
             onSubmit={(e) => { e.preventDefault(); onScan(scanText); }}>
             <div className="sr-modal-head"><h2>Scan a label</h2></div>
             <div className="sr-modal-body">
-              <p className="sr-card-sub">Point the scanner gun at the label, or type the code under the barcode.</p>
               {scanMsg && <p className="sr-error" role="alert">{scanMsg}</p>}
-              <input autoFocus className="sr-input" value={scanText} placeholder="e.g. NAS-RED-ST-L-001"
+              {cameraOn
+                ? <CameraScanner onDetected={onCameraCode} />
+                : <button type="button" className="sr-btn sai-cam-btn" onClick={() => setCameraOn(true)} disabled={busy}>Scan with camera</button>}
+              <p className="sr-card-sub" style={{ marginTop: 10 }}>{cameraOn ? "Camera not working? Type the code under the barcode:" : "Or use the scanner gun, or type the code under the barcode:"}</p>
+              <input autoFocus={!cameraOn} className="sr-input" value={scanText} placeholder="e.g. NAS-RED-ST-L-001"
                 onChange={(e) => setScanText(e.target.value.toUpperCase())} aria-label="Label code" />
               <div className="sai-scan-actions">
-                <button type="button" className="sr-btn" onClick={() => setScanBox(false)}>Close</button>
+                <button type="button" className="sr-btn" onClick={() => { setCameraOn(false); setScanBox(false); }}>Close</button>
                 <button type="submit" className="sr-btn sr-btn-primary" disabled={!scanText.trim() || busy}>{busy ? "Looking…" : "Show details"}</button>
               </div>
             </div>

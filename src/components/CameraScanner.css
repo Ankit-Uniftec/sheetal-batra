@@ -1,0 +1,17 @@
+/* Release 35: camera barcode scanner */
+.cam-scan { width: 100%; }
+.cam-scan-view {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 52vh;
+  background: #111; border-radius: 10px; overflow: hidden;
+}
+.cam-scan-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cam-scan-target {
+  position: absolute; left: 8%; right: 8%; top: 30%; bottom: 30%;
+  border: 3px solid #d5b85a; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+}
+.cam-scan-note {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 20px; color: #fff !important; font-size: 15px; background: rgba(0, 0, 0, 0.55);
+}
+.cam-scan-note.is-error { background: rgba(60, 20, 10, 0.8); }
+.cam-scan-help { margin: 8px 0 0; font-size: 13px; color: #666; text-align: center; }

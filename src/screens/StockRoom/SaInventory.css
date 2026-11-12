@@ -8,8 +8,10 @@
 .sr.sr-embed .sai-title { font-size: 1.45rem; }
 .sr.sr-embed .sai-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .sr.sr-embed .sai-tools > :first-child { flex: 1 1 260px; max-width: 420px; }
-.sr .sai-scan { width: min(440px, 100%); }
+.sr .sai-scan { width: min(540px, 100%); max-height: 94vh; overflow-y: auto; }
 .sr .sai-scan input { width: 100%; min-height: 40px; font-size: 16px; margin-top: 8px; }
 .sr .sai-scan-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .sr.sr-portal { position: static; inset: auto; overflow: visible; isolation: auto; background: transparent; min-height: 0; }
 .sr.sr-embed .sr-scroller { background: #fff; border-radius: 12px; }
+.sr .sai-cam-btn { width: 100%; min-height: 48px; justify-content: center; border-style: dashed; }
+.sr .cam-scan-note { color: #fff !important; }

@@ -212,7 +212,7 @@
   background: rgba(0, 0, 0, 0.35); padding: 16px;
 }
 .pf-scan-box {
-  width: 100%; max-width: 420px; background: #fff; border-radius: 12px; padding: 22px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  width: 100%; max-width: 540px; background: #fff; border-radius: 12px; padding: 22px; max-height: 94vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 .pf-scan-box h3 { margin: 0 0 6px; font-size: 18px; }
 .pf-scan-box p { margin: 0 0 14px; color: #666; font-size: 14px; }
@@ -223,3 +223,8 @@
 }
 .pf-scan-actions button.primary { background: #d5b85a; color: #fff; font-weight: 600; }
 .pf-scan-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+.pf-scan-camera-btn {
+  width: 100%; min-height: 48px; margin-bottom: 12px; border: 1px dashed #d5b85a; border-radius: 10px;
+  background: #fff8e6; color: #8b7240; font-weight: 600; font-size: 15px; cursor: pointer;
+}
+.pf-scan-box .cam-scan { margin-bottom: 12px; }
