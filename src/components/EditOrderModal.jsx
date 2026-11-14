@@ -6,6 +6,7 @@ import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import { fetchLinePieces } from "../utils/breakdownChangeApi";
 import { planPieceSync, previewMoney, pieceLock, planToRpcArgs } from "../utils/orderPieceEdit";
 import "../screens/OrderHistory.css";
+import { MEASUREMENT_FIELDS, GROUP_DISPLAY_NAMES, TOP_GROUPS, BOTTOM_GROUPS } from "../utils/measurementChart";
 
 // ============================================================
 // The order edit modal — lifted out of OrderHistory so every dashboard that
@@ -16,39 +17,13 @@ import "../screens/OrderHistory.css";
 // ============================================================
 
 // Measurement categories and fields (same as Screen4)
-const CATEGORY_KEY_MAP = {
-  "Kurta/Choga/Kaftan": "KurtaChogaKaftan",
-  "Blouse": "Blouse",
-  "Anarkali": "Anarkali",
-  "Salwar/Dhoti": "SalwarDhoti",
-  "Churidaar/Trouser/Pants/Plazo": "ChuridaarTrouserPantsPlazo",
-  "Sharara/Gharara": "ShararaGharara",
-  "Lehenga": "Lehenga",
-};
-
+// Release 38: categories and fields come from the client's chart
+// (utils/measurementChart.js), the same one the order form uses.
+const CATEGORY_KEY_MAP = Object.fromEntries(
+  ["Height", ...TOP_GROUPS, ...BOTTOM_GROUPS].map((k) => [GROUP_DISPLAY_NAMES[k], k])
+);
 const measurementCategories = Object.keys(CATEGORY_KEY_MAP);
-
-const measurementFields = {
-  KurtaChogaKaftan: [
-    "Height", "Shoulder", "Neck", "Upper Bust", "Bust", "Dart Point",
-    "Sleeves", "Bicep", "Arm Hole", "Waist", "Hip", "Length",
-    "Front Cross", "Back Cross", "Front Neck", "Back Neck",
-  ],
-  Blouse: [
-    "Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Arm Hole",
-    "Waist", "Length", "Front Cross", "Back Cross", "Front Neck", "Back Neck",
-  ],
-  Anarkali: [
-    "Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Bicep",
-    "Arm Hole", "Length", "Front Neck", "Back Neck",
-  ],
-  SalwarDhoti: ["Waist", "Hip", "Length"],
-  ChuridaarTrouserPantsPlazo: [
-    "Waist", "Hip", "Length", "Thigh", "Calf", "Ankle", "Knee", "Yoke Length",
-  ],
-  ShararaGharara: ["Waist", "Hip", "Length"],
-  Lehenga: ["Waist", "Hip", "Length"],
-};
+const measurementFields = MEASUREMENT_FIELDS;
 
 const colorName = (c) => (typeof c === "object" && c !== null ? c.name || "" : c || "");
 
@@ -95,7 +70,7 @@ export default function EditOrderModal({
   const [colors, setColors] = useState([]);
   const [saving, setSaving] = useState(false);
   const [reason, setReason] = useState("");
-  const [activeCategory, setActiveCategory] = useState("Kurta/Choga/Kaftan");
+  const [activeCategory, setActiveCategory] = useState(GROUP_DISPLAY_NAMES.KurtaChogaKaftan);
   const item = order.items?.[0] || {};
   const [measurements, setMeasurements] = useState(item.measurements || {});
   const [form, setForm] = useState({

@@ -4,49 +4,16 @@ import "./AlterationModal.css";
 import { supabase } from "../lib/supabaseClient";
 import formatIndianNumber from "../utils/formatIndianNumber";
 import { usePopup } from "./Popup";
+import { MEASUREMENT_FIELDS, GROUP_DISPLAY_NAMES, TOP_GROUPS, BOTTOM_GROUPS } from "../utils/measurementChart";
 
 // Measurement categories and fields
-const CATEGORY_KEY_MAP = {
-  "Kurta/Choga/Kaftan": "KurtaChogaKaftan",
-  "Blouse": "Blouse",
-  "Anarkali": "Anarkali",
-  "Salwar/Dhoti": "SalwarDhoti",
-  "Churidaar/Trouser/Pants/Plazo": "ChuridaarTrouserPantsPlazo",
-  "Sharara/Gharara": "ShararaGharara",
-  "Lehenga": "Lehenga",
-};
-
-const measurementCategories = [
-  "Kurta/Choga/Kaftan",
-  "Blouse",
-  "Anarkali",
-  "Salwar/Dhoti",
-  "Churidaar/Trouser/Pants/Plazo",
-  "Sharara/Gharara",
-  "Lehenga",
-];
-
-const measurementFields = {
-  KurtaChogaKaftan: [
-    "Height", "Shoulder", "Neck", "Upper Bust", "Bust", "Dart Point",
-    "Sleeves", "Bicep", "Arm Hole", "Waist", "Hip", "Length",
-    "Front Cross", "Back Cross", "Front Neck", "Back Neck",
-  ],
-  Blouse: [
-    "Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Arm Hole",
-    "Waist", "Length", "Front Cross", "Back Cross", "Front Neck", "Back Neck",
-  ],
-  Anarkali: [
-    "Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Bicep",
-    "Arm Hole", "Length", "Front Neck", "Back Neck",
-  ],
-  SalwarDhoti: ["Waist", "Hip", "Length"],
-  ChuridaarTrouserPantsPlazo: [
-    "Waist", "Hip", "Length", "Thigh", "Calf", "Ankle", "Knee", "Yoke Length",
-  ],
-  ShararaGharara: ["Waist", "Hip", "Length"],
-  Lehenga: ["Waist", "Hip", "Length"],
-};
+// Release 38: categories and fields come from the client's chart
+// (utils/measurementChart.js), the same one the order form uses.
+const CATEGORY_KEY_MAP = Object.fromEntries(
+  ["Height", ...TOP_GROUPS, ...BOTTOM_GROUPS].map((k) => [GROUP_DISPLAY_NAMES[k], k])
+);
+const measurementCategories = Object.keys(CATEGORY_KEY_MAP);
+const measurementFields = MEASUREMENT_FIELDS;
 
 // Alteration type options
 const ALTERATION_TYPES = [
@@ -111,7 +78,7 @@ export default function AlterationModal({
   // Measurements state
   const [measurements, setMeasurements] = useState({});
   const [showMeasurements, setShowMeasurements] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("Kurta/Choga/Kaftan");
+  const [activeCategory, setActiveCategory] = useState(GROUP_DISPLAY_NAMES.KurtaChogaKaftan);
 
   // Attachments state
   const [attachments, setAttachments] = useState([]);
