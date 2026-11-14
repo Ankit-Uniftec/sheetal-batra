@@ -13,7 +13,7 @@ import {
 // Full-resolution copy reserved for PDF embedding — logo.png (used by screens)
 // is downscaled for the web and must not end up inside generated PDFs.
 import Logo from "../images/logo-pdf.png";
-import { generateOrderBarcodeImages, generateLabelBarcodeDataUrl, generateBarcodeDataUrl } from "./barcodeImageUtils";
+import { generateOrderBarcodeImages, generateLabelBarcodeDataUrl } from "./barcodeImageUtils";
 import { ensureOrderComponents } from "./barcodeService";
 
 // Resolves the "client name" for a PDF header. B2B orders have no
@@ -735,7 +735,6 @@ export const openPieceLabels = async (pieces, productsById) => {
       colour: p.colour,
       size: p.size,
       mrp: mrp > 0 ? Math.round(mrp).toLocaleString("en-IN") : "",
-      image: generateBarcodeDataUrl(p.code, { width: 2, height: 60, displayValue: false, margin: 0 }),
     };
   });
   const blob = await pdf(<PieceLabelPdf labels={labels} />).toBlob();
