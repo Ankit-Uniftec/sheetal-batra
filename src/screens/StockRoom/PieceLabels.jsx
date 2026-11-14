@@ -57,12 +57,12 @@ export default function PieceLabels({ row, onClose, notify, canCancel = true }) 
 
   const stockForSize = row.stock.bySize ? row.stock.bySize[size] ?? Object.entries(row.stock.bySize).find(([k]) => canonicalSize(k) === canonicalSize(size))?.[1] : null;
   const activeForSize = (pieces || []).filter((x) => canonicalSize(x.size) === canonicalSize(size) && (x.status === "available" || x.status === "held")).length;
-  const preview = `${pieceLetters(p.name) || "???"}-${pieceLetters(colour) || "???"}-${type}-${sizeLabel(size).toUpperCase() || "?"}-###`;
+  // Release 37: the code no longer carries the colour (NAS-ST-L-001).
+  const preview = `${pieceLetters(p.name) || "???"}-${type}-${sizeLabel(size).toUpperCase() || "?"}-###`;
   const n = Math.floor(Number(qty));
 
   const problem = !installed ? "Piece labels are not set up yet: run the Release 35 SQL first."
     : !colour.trim() ? "Pick the colour."
-      : pieceLetters(colour).length < 3 ? "The colour needs at least 3 letters."
         : pieceLetters(p.name).length < 3 ? "The product name needs at least 3 letters."
           : !size ? "Pick the size."
             : !(n >= 1 && n <= 200) ? "Print 1 to 200 labels at a time." : null;
