@@ -231,6 +231,7 @@ export function SearchableSelect({
                         />
                       )}
                       {opt.label}
+                      {opt.badge && <span className="pf-opt-badge">{opt.badge}</span>}
                     </div>
                   </li>
                 );
@@ -3643,6 +3644,8 @@ export default function ProductForm() {
                     .map((p) => ({
                       label: p.name,
                       value: p.id,
+                      // Release 38: the new catalogue is marked while the old one is still live.
+                      badge: p.new_catalogue ? "NEW" : null,
                     }))}
                   value={selectedProduct?.id || ""}
                   onChange={(val) => {
@@ -3679,6 +3682,7 @@ export default function ProductForm() {
                 )}
                 {selectedProduct && !(isCustomMens && !isPrivateSA) && (
                   <p className="product-price">
+                    {selectedProduct.new_catalogue && <span className="pf-opt-badge" style={{ marginLeft: 0, marginRight: 8 }}>NEW</span>}
                     Price:{" "}
                     <strong>₹{formatIndianNumber(getBasePrice())}</strong>
                     {isSyncProduct && selectedSize && localInventory[selectedSize] !== undefined && (
