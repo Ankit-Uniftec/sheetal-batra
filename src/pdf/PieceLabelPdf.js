@@ -1,5 +1,5 @@
 import React from "react";
-import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer";
 
 /**
  * PieceLabelPdf — Release 35 garment labels, one per physical piece.
@@ -18,15 +18,17 @@ import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/render
  *        ||||||||||||||||||||
  *          NAS-ST-L-001
  *
- * FONT: the client asked for Athelas, a paid font that is not in the repo.
- * Until its .ttf is supplied (put it in public/fonts and register it below as
- * LABEL_SERIF), the built-in Times family prints instead — a close classic
- * serif that needs no download. The price prints as "INR 26,500" (client
+ * FONT: Athelas Regular, the client's licensed font (public/fonts). The price prints as "INR 26,500" (client
  * feedback), so no rupee-sign font is needed. No outline (client feedback).
  */
 
-const LABEL_SERIF = "Times-Roman";
-const LABEL_SERIF_ITALIC = "Times-Italic";
+// Athelas (client's licensed font, public/fonts/Athelas-Regular.ttf). Only the
+// Regular face was supplied, so the colour / size values print upright; add
+// Athelas-Italic.ttf and register it as fontStyle "italic" to match the
+// client's sample exactly.
+Font.register({ family: "Athelas", src: "/fonts/Athelas-Regular.ttf" });
+const LABEL_SERIF = "Athelas";
+const LABEL_SERIF_ITALIC = "Athelas";
 
 const MM = 72 / 25.4;
 const SIZE = 50 * MM;
@@ -48,7 +50,9 @@ const s = StyleSheet.create({
   value: { fontFamily: LABEL_SERIF_ITALIC, fontSize: 10, marginTop: 0.4 * MM, color: "#111111" },
   mrp: { fontFamily: LABEL_SERIF, fontSize: 9, letterSpacing: 0.4, color: "#111111" },
   bars: { width: "100%", height: 7.2 * MM, marginTop: 1.2 * MM, objectFit: "fill" },
-  code: { fontFamily: LABEL_SERIF, fontSize: 5.6, letterSpacing: 0.8, marginTop: 0.6 * MM, color: "#111111" },
+  // The code stays in Times: Athelas draws 0 like a small "o", and SAs type
+  // this code by hand when a scan fails.
+  code: { fontFamily: "Times-Roman", fontSize: 5.6, letterSpacing: 0.8, marginTop: 0.6 * MM, color: "#111111" },
 });
 
 // Long colours ("Emerald Green") shrink to stay on one line in the half-width
