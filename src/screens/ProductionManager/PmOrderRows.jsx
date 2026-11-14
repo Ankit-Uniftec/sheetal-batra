@@ -104,12 +104,14 @@ function RowMenu({ items }) {
 // ---- each piece with its own measurements
 // Which measurement set belongs to a piece, from the piece's name ("Long Choga" -> Kurta / Choga / Kaftan).
 const MEASURE_FOR = [
-  [/kurta|choga|chauga|kaftan|tunic/i, "KurtaChogaKaftan"],
+  [/separate top/i, "SeparateTop"],
+  [/separate bottom/i, "SeparateBottom"],
+  [/kurta|choga|chauga|kaftan|tunic|dress|jacket/i, "KurtaChogaKaftan"],
   [/blouse|choli/i, "Blouse"],
-  [/anarkali/i, "Anarkali"],
+  [/anarkali|angrakha/i, "Anarkali"],
   [/salwar|dhoti/i, "SalwarDhoti"],
-  [/churi|trouser|pant|pla[z]+o|palazzo/i, "ChuridaarTrouserPantsPlazo"],
-  [/sharara|gharara/i, "ShararaGharara"],
+  [/churi|choori|trouser|pant|pla[z]+o|palazzo|saree/i, "ChuridaarTrouserPantsPlazo"],
+  [/sharara|gharara|garara/i, "ShararaGharara"],
   [/lehenga|skirt/i, "Lehenga"],
 ];
 const filled = (f) => f && typeof f === "object" && Object.values(f).some((v) => v !== "" && v != null);
@@ -118,8 +120,8 @@ function measuresFor(c, item) {
   const hit = MEASURE_FOR.find(([re, key]) => re.test(c.component_label || "") && filled(m[key]));
   if (hit) return m[hit[1]];
   // Otherwise the first filled set of the piece's kind (a top or a bottom).
-  const kinds = c.component_type === "top" ? ["KurtaChogaKaftan", "Anarkali", "Blouse"]
-    : c.component_type === "bottom" ? ["SalwarDhoti", "ChuridaarTrouserPantsPlazo", "ShararaGharara", "Lehenga"] : [];
+  const kinds = c.component_type === "top" ? ["KurtaChogaKaftan", "Anarkali", "Blouse", "SeparateTop"]
+    : c.component_type === "bottom" ? ["SalwarDhoti", "ChuridaarTrouserPantsPlazo", "ShararaGharara", "Lehenga", "SeparateBottom"] : [];
   const k = kinds.find((x) => filled(m[x]));
   return k ? m[k] : null;
 }

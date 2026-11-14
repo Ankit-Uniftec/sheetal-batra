@@ -1,3 +1,4 @@
+import { groupKind } from "../utils/measurementChart";
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import "./WarehouseDashboard.css";
 import { useNavigate } from "react-router-dom";
@@ -78,15 +79,7 @@ const STATUS_TABS = [
   // { value: "alteration", label: "Alterations" },
 ];
 
-const getMeasurementLabel = (key) => {
-  if (!key) return key;
-  const topKeys = ["KurtaChogaKaftan", "Blouse", "Anarkali"];
-  const bottomKeys = ["SalwarDhoti", "ChuridaarTrouserPantsPlazo", "ShararaGharara"];
-  if (topKeys.includes(key)) return "Top";
-  if (bottomKeys.includes(key)) return "Bottom";
-  if (key === "Lehenga") return "Lehenga";
-  return key;
-};
+const getMeasurementLabel = (key) => (key ? groupKind(key) : key); // Release 38: shared chart
 
 const WarehouseDashboard = () => {
   const { showPopup, PopupComponent } = usePopup();

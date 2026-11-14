@@ -23,6 +23,7 @@ import { holdStockPiece, releaseStockPiece } from "../utils/shopifyInventory";
 import { scanProblem, writeHeldCodes } from "../utils/stockPieces";
 import { canonicalSize } from "./StockRoom/stockRoomModel";
 import CameraScanner, { prefersCamera } from "../components/CameraScanner";
+import { GARMENT_GROUP, GROUP_DISPLAY_NAMES, ALL_GROUP_DISPLAY_NAMES, MEASUREMENT_FIELDS, CLIENT_TOPS, CLIENT_BOTTOMS, mergeOptions } from "../utils/measurementChart";
 
 /**
  * Generic Searchable Select (no external libs)
@@ -354,6 +355,9 @@ const KIDS_MEASUREMENT_FIELDS = {
     "Length",
   ],
 };
+// Release 38: the two new adult groups, for kids, use the nearest kids lists.
+KIDS_MEASUREMENT_FIELDS.SeparateTop = KIDS_MEASUREMENT_FIELDS.KurtaChogaKaftan;
+KIDS_MEASUREMENT_FIELDS.SeparateBottom = KIDS_MEASUREMENT_FIELDS.ChuridaarTrouserPantsPlazo;
 
 const SIZE_CHART_US = {
   XXS: { Bust: 30, Waist: 24, Hip: 34 },
@@ -388,148 +392,14 @@ const SIZE_CHART_VALUE_SET = (() => {
 })();
 
 // 🔑 UI label → internal key mapping
-const CATEGORY_KEY_MAP = {
-  // Tops - Kurta variants
-  "Short Kurta": "KurtaChogaKaftan",
-  "Kurta": "KurtaChogaKaftan",
-  "Long Kurta": "KurtaChogaKaftan",
-  "Short A-Line Kurta": "KurtaChogaKaftan",
-  "Short Choga": "KurtaChogaKaftan",
-  "Choga": "KurtaChogaKaftan",
-  "Chauga": "KurtaChogaKaftan", // spelling variant present in product data
-  "Long Choga": "KurtaChogaKaftan",
-  "Kaftan": "KurtaChogaKaftan",
-  // A jacket takes the same upper-body measurements, so it shares the
-  // Kurta/Choga/Kaftan tab (client-confirmed). Unmapped tops open NO
-  // measurement tab at all — 716 products carry "Jacket".
-  "Jacket": "KurtaChogaKaftan",
-  "Suit": "KurtaChogaKaftan",
-
-  // Tops - Others
-  "Blouse": "Blouse",
-  "Short Anarkali": "Anarkali",
-  "Anarkali": "Anarkali",
-
-  // Bottoms - Salwar variants
-  "Salwar": "SalwarDhoti",
-  "Dhoti": "SalwarDhoti",
-
-  // Bottoms - Churidaar variants
-  "Churidaar": "ChuridaarTrouserPantsPlazo",
-  "Trouser": "ChuridaarTrouserPantsPlazo",
-  "Pants": "ChuridaarTrouserPantsPlazo",
-  "Palazzo": "ChuridaarTrouserPantsPlazo",
-
-  // Bottoms - Sharara variants
-  "Sharara": "ShararaGharara",
-  "Gharara": "ShararaGharara",
-  "Garara": "ShararaGharara", // same garment, spelled this way on 144 products
-
-  // One-piece
-  "Lehenga": "Lehenga",
-};
-
-const CATEGORY_DISPLAY_NAMES = {
-  "Height": "Height",
-  "KurtaChogaKaftan": "Kurta / Choga / Kaftan",
-  "Blouse": "Blouse",
-  "Anarkali": "Anarkali",
-  "SalwarDhoti": "Salwar / Dhoti",
-  "ChuridaarTrouserPantsPlazo": "Churidaar / Trouser / Pants / Palazzo",
-  "ShararaGharara": "Sharara / Gharara",
-  "Lehenga": "Lehenga",
-};
-
-
-const ALL_MEASUREMENT_CATEGORIES = [
-  "Height",
-  "Kurta / Choga / Kaftan",
-  "Blouse",
-  "Anarkali",
-  "Salwar / Dhoti",
-  "Churidaar / Trouser / Pants / Palazzo",
-  "Sharara / Gharara",
-  "Lehenga",
-];
-
-
-
-const measurementFields = {
-  Height: [
-    "Height",
-  ],
-  KurtaChogaKaftan: [
-    "Shoulder",
-    "Neck",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Mori",
-    "Bicep",
-    "Arm Hole",
-    "Waist",
-    "Hip",
-    "Length",
-    "Front Cross",
-    "Back Cross",
-    "Front Neck",
-    "Back Neck",
-  ],
-  Blouse: [
-    "Shoulder",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Mori",
-    "Arm Hole",
-    "Waist",
-    "Length",
-    "Front Cross",
-    "Back Cross",
-    "Front Neck",
-    "Back Neck",
-  ],
-  Anarkali: [
-    "Shoulder",
-    "Upper Bust",
-    "Bust",
-    "Dart Point",
-    "Sleeves",
-    "Mori",
-    "Bicep",
-    "Arm Hole",
-    "Length",
-    "Front Neck",
-    "Back Neck",
-  ],
-  SalwarDhoti: [
-    "Waist",
-    "Hip",
-    "Length",
-  ],
-  ChuridaarTrouserPantsPlazo: [
-    "Waist",
-    "Hip",
-    "Length",
-    "Thigh",
-    "Calf",
-    "Ankle",
-    "Knee",
-    "Yoke Length",
-  ],
-  ShararaGharara: [
-    "Waist",
-    "Hip",
-    "Length",
-  ],
-  Lehenga: [
-    "Waist",
-    "Hip",
-    "Length",
-  ],
-};
+// Release 38: garment → measurement group, group names and fields all come
+// from the client's chart in utils/measurementChart.js (shared with the edit /
+// alteration windows). CATEGORY_KEY_MAP[name] still works: it now matches any
+// spelling of the garment (case, spaces, dashes).
+const CATEGORY_KEY_MAP = GARMENT_GROUP;
+const CATEGORY_DISPLAY_NAMES = GROUP_DISPLAY_NAMES;
+const ALL_MEASUREMENT_CATEGORIES = ALL_GROUP_DISPLAY_NAMES;
+const measurementFields = MEASUREMENT_FIELDS;
 
 export default function ProductForm() {
   const navigate = useNavigate();
@@ -614,6 +484,11 @@ export default function ProductForm() {
   const [dupattaColors, setDupattaColors] = useState([]);
   const [tops, setTops] = useState([]);
   const [bottoms, setBottoms] = useState([]);
+  // Release 38: every product offers every top / bottom (client decision); the
+  // product only sets the default. = every value any catalogue product uses +
+  // the client's drop-down lists + Separate Top / Separate Bottom.
+  const allTopOptions = useMemo(() => mergeOptions(products.flatMap((p) => [...(p.top_options || []), p.default_top]), CLIENT_TOPS), [products]);
+  const allBottomOptions = useMemo(() => mergeOptions(products.flatMap((p) => [...(p.bottom_options || []), p.default_bottom]), CLIENT_BOTTOMS), [products]);
   const [globalExtras, setGlobalExtras] = useState([]);
 
   const [selectedColor, setSelectedColor] = useState({ name: "", hex: "" });
@@ -679,7 +554,7 @@ export default function ProductForm() {
 
   // MEASUREMENT DROPDOWN
   const [showMeasurements, setShowMeasurements] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("Kurta / Choga / Kaftan");
+  const [activeCategory, setActiveCategory] = useState(GROUP_DISPLAY_NAMES.KurtaChogaKaftan);
   const [expandedRowIds, setExpandedRowIds] = useState({}); // {[_id]: true/false}
   const [availableSizes, setAvailableSizes] = useState([]);
   const [isKidsProduct, setIsKidsProduct] = useState(false); // New state for Kids checkbox
@@ -738,7 +613,7 @@ export default function ProductForm() {
     // Initialize category for this item if not set
     if (!expandedItemCategories[id]) {
       const item = orderItems.find(it => it._id === id);
-      let defaultDisplayName = "Kurta / Choga / Kaftan";
+      let defaultDisplayName = GROUP_DISPLAY_NAMES.KurtaChogaKaftan;
 
       if (item?.top && CATEGORY_KEY_MAP[item.top]) {
         const categoryKey = CATEGORY_KEY_MAP[item.top];
@@ -1704,14 +1579,16 @@ export default function ProductForm() {
     setIncludesDupatta(selectedProduct.has_dupatta === true);
     setSelectedDupattaColor(selectedProduct.default_dupatta_color || "");
 
-    // Set product options
-    setTops(selectedProduct.top_options || []);
-
-    // CHANGE #5: Sort bottoms alphabetically
-    const sortedBottoms = [...(selectedProduct.bottom_options || [])].sort((a, b) =>
-      String(a).localeCompare(String(b))
-    );
-    setBottoms(sortedBottoms);
+    // Set product options. Release 38: made-to-order offers ALL tops / bottoms
+    // (the product's default is pre-selected below, the SA may change it);
+    // an LXRTS piece already exists, so it keeps only its own.
+    if (syncEnabled) {
+      setTops(selectedProduct.top_options || []);
+      setBottoms([...(selectedProduct.bottom_options || [])].sort((a, b) => String(a).localeCompare(String(b))));
+    } else {
+      setTops(mergeOptions(allTopOptions, selectedProduct.top_options || []));
+      setBottoms(mergeOptions(allBottomOptions, selectedProduct.bottom_options || []));
+    }
 
     // Calculate available sizes (skip for sync products - handled in fetch variants)
     let newAvailableSizes;
@@ -1746,14 +1623,19 @@ export default function ProductForm() {
     const defaultBottom = selectedProduct.default_bottom || bottomOptions[0] || "";
 
     const defaultColorName = selectedProduct.default_color || "";
-    const defaultColor = colors.find(c => c.name === defaultColorName) || { name: "", hex: "" };
+    const findColour = (name) => colors.find((c) => String(c.name).toLowerCase() === String(name || "").toLowerCase()) || { name: "", hex: "" };
+    const defaultColor = findColour(defaultColorName);
+    // Release 38: the sheet gives the top and the bottom their own colour
+    // (e.g. Deep Red top, Burnt Orange bottom); the product colour is the fallback.
+    const defaultTopColor = selectedProduct.default_top_color ? findColour(selectedProduct.default_top_color) : defaultColor;
+    const defaultBottomColor = selectedProduct.default_bottom_color ? findColour(selectedProduct.default_bottom_color) : defaultColor;
 
     // For sync products: always use defaults, no changes allowed
     if (syncEnabled) {
       setSelectedTop(defaultTop);
-      setSelectedTopColor(defaultTop ? defaultColor : { name: "", hex: "" });
+      setSelectedTopColor(defaultTop ? defaultTopColor : { name: "", hex: "" });
       setSelectedBottom(defaultBottom);
-      setSelectedBottomColor(defaultBottom ? defaultColor : { name: "", hex: "" });
+      setSelectedBottomColor(defaultBottom ? defaultBottomColor : { name: "", hex: "" });
       setSelectedExtrasWithColors([]); // No extras for sync products
       setSelectedExtra("");
       setSelectedExtraColor({ name: "", hex: "" });
@@ -1761,12 +1643,12 @@ export default function ProductForm() {
       // Only set defaults if not already set
       setSelectedTop((current) => current || defaultTop);
       setSelectedTopColor((current) =>
-        current?.name ? current : (defaultTop ? defaultColor : { name: "", hex: "" })
+        current?.name ? current : (defaultTop ? defaultTopColor : { name: "", hex: "" })
       );
 
       setSelectedBottom((current) => current || defaultBottom);
       setSelectedBottomColor((current) =>
-        current?.name ? current : (defaultBottom ? defaultColor : { name: "", hex: "" })
+        current?.name ? current : (defaultBottom ? defaultBottomColor : { name: "", hex: "" })
       );
 
       // Auto-populate default extra only if no extras selected
@@ -3118,9 +3000,11 @@ export default function ProductForm() {
     const sortedBottoms = [...(product?.bottom_options || [])].sort((a, b) =>
       String(a).localeCompare(String(b))
     );
+    // Release 38: made-to-order lines can switch to any top / bottom too.
+    const fixed = product?.sync_enabled === true;
     return {
-      tops: product?.top_options || [],
-      bottoms: sortedBottoms,
+      tops: fixed ? (product?.top_options || []) : mergeOptions(allTopOptions, product?.top_options || []),
+      bottoms: fixed ? sortedBottoms : mergeOptions(allBottomOptions, sortedBottoms),
       sizes: product?.available_size || [],
     };
   };

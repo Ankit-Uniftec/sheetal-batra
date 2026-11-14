@@ -1,3 +1,4 @@
+import { groupKind } from "../utils/measurementChart";
 import React from "react";
 import { getItemCategory } from "../utils/itemCategory";
 import { getWarehouseDateObj } from "../utils/warehouseDate";
@@ -85,30 +86,9 @@ const getAlterationTypeLabel = (type) => {
  * Helper to categorize measurement keys as "Top" or "Bottom"
  * Based on exact keys used in the system
  */
-const getMeasurementLabel = (key) => {
-  if (!key) return key;
-
-  // TOP garments
-  const topKeys = [
-    "KurtaChogaKaftan",
-    "Blouse",
-    "Anarkali"
-  ];
-
-  // BOTTOM garments
-  const bottomKeys = [
-    "SalwarDhoti",
-    "ChuridaarTrouserPantsPlazo",
-    "ShararaGharara"
-  ];
-
-  if (topKeys.includes(key)) return "Top";
-  if (bottomKeys.includes(key)) return "Bottom";
-  if (key === "Lehenga") return "Lehenga";
-
-  // Return original key if not matched
-  return key;
-};
+// Release 38: Top / Bottom / Lehenga from the shared chart (covers the new
+// Separate Top / Separate Bottom groups too).
+const getMeasurementLabel = (key) => (key ? groupKind(key) : key);
 
 // Warehouse specific styles
 const warehouseStyles = StyleSheet.create({
