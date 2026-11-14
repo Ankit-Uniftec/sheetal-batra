@@ -175,6 +175,9 @@ export default function OrderDetails() {
   const SHOPMORE_CODES = {
     SHOPMORE28K: { amount: 2200, minSpend: 28000 },
     SHOPMORE45K: { amount: 4200, minSpend: 45000 },
+    // Client 2026-11-14: stackable like the other SHOPMORE codes (with one % / birthday code).
+    SHOPMORE120K: { amount: 10000, minSpend: 120000 },
+    SHOPMORE175K: { amount: 12000, minSpend: 175000 },
     // ₹1,000 off the order total, no minimum spend.
     SBFIRST: { amount: 1000, minSpend: 0 },
   };
