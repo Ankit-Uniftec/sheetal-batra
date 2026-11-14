@@ -4,26 +4,28 @@
 // separate chunk on the first PDF action, not on every dashboard load.
 // All wrapped functions were already async, so signatures are unchanged.
 
+import { importFresh } from "./chunkReload";
+
 export const downloadCustomerPdf = async (...args) =>
-  (await import("./pdfUtils")).downloadCustomerPdf(...args);
+  (await importFresh(() => import("./pdfUtils"))).downloadCustomerPdf(...args);
 
 export const downloadWarehousePdf = async (...args) =>
-  (await import("./pdfUtils")).downloadWarehousePdf(...args);
+  (await importFresh(() => import("./pdfUtils"))).downloadWarehousePdf(...args);
 
 export const openPrivateWarehousePdf = async (...args) =>
-  (await import("./pdfUtils")).openPrivateWarehousePdf(...args);
+  (await importFresh(() => import("./pdfUtils"))).openPrivateWarehousePdf(...args);
 
 export const downloadSingleWarehousePdf = async (...args) =>
-  (await import("./pdfUtils")).downloadSingleWarehousePdf(...args);
+  (await importFresh(() => import("./pdfUtils"))).downloadSingleWarehousePdf(...args);
 
 export const generateAllPdfs = async (...args) =>
-  (await import("./pdfUtils")).generateAllPdfs(...args);
+  (await importFresh(() => import("./pdfUtils"))).generateAllPdfs(...args);
 
 export const clearPdfUrls = async (...args) =>
-  (await import("./pdfUtils")).clearPdfUrls(...args);
+  (await importFresh(() => import("./pdfUtils"))).clearPdfUrls(...args);
 
 export const downloadSkuBarcodeSheet = async (...args) =>
-  (await import("./pdfUtils")).downloadSkuBarcodeSheet(...args);
+  (await importFresh(() => import("./pdfUtils"))).downloadSkuBarcodeSheet(...args);
 
 export const openPieceLabels = async (...args) =>
-  (await import("./pdfUtils")).openPieceLabels(...args);
+  (await importFresh(() => import("./pdfUtils"))).openPieceLabels(...args);
