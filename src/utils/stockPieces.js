@@ -3,7 +3,8 @@ import { releaseStockPiece } from "./shopifyInventory";
 import { staffClient } from "./staffSession";
 
 // ============================================================
-// Release 35 — piece labels (one per garment): NAS-RED-ST-L-001.
+// Release 35 — piece labels (one per garment): NAS-ST-L-001 (Release 37;
+// labels printed before carry the colour too: NAS-RED-ST-L-001).
 //
 // The code is looked up in `stock_pieces`, never decoded from its letters.
 // Holding / releasing goes through shopify-inventory-v2 (holdStockPiece /
@@ -20,7 +21,8 @@ export const HELD_KEY = "sbHeldPieces";
 export const KEEP_ALIVE_MS = 5 * 60 * 1000;
 
 // Same shape the database makes: 3 letters - 3 letters - ST|CT - size - serial.
-const PIECE_CODE_RE = /^[A-Z]{3}-[A-Z]{3}-(ST|CT)-[A-Z0-9]+-\d{3,}$/;
+// NAS-ST-L-001 (Release 37); older labels also carry the colour: NAS-RED-ST-L-001.
+const PIECE_CODE_RE = /^[A-Z]{3}-(?:[A-Z]{3}-)?(ST|CT)-[A-Z0-9]+-\d{3,}$/;
 export const looksLikePieceCode = (code) => PIECE_CODE_RE.test(String(code || "").trim().toUpperCase());
 
 /** First 3 letters A–Z of a word, upper case (mirrors stock_piece_letters in SQL). */

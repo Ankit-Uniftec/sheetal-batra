@@ -1,5 +1,5 @@
 import React from "react";
-import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer";
+import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer";
 
 /**
  * PieceLabelPdf — Release 35 garment labels, one per physical piece.
@@ -14,19 +14,16 @@ import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/
  *        COLOUR    |    SIZE
  *         Red      |     L
  *   ─────────────────────────────────
- *          MRP ₹26,500
+ *          INR 26,500
  *        ||||||||||||||||||||
- *        NAS-RED-ST-L-001
+ *          NAS-ST-L-001
  *
  * FONT: the client asked for Athelas, a paid font that is not in the repo.
  * Until its .ttf is supplied (put it in public/fonts and register it below as
  * LABEL_SERIF), the built-in Times family prints instead — a close classic
- * serif that needs no download. The ₹ sign is not in Times (WinAnsi), so it
- * alone is drawn in Noto Sans (the same file CustomerOrderPdf loads).
+ * serif that needs no download. The price prints as "INR 26,500" (client
+ * feedback), so no rupee-sign font is needed. No outline (client feedback).
  */
-
-// Same Noto Sans the customer PDF uses (public/fonts/*.ttf are empty files).
-Font.register({ family: "LabelRupee", src: "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans@4.5.0/files/noto-sans-all-400-normal.woff" });
 
 const LABEL_SERIF = "Times-Roman";
 const LABEL_SERIF_ITALIC = "Times-Italic";
@@ -38,7 +35,7 @@ const s = StyleSheet.create({
   page: { padding: 0, backgroundColor: "#ffffff" },
   frame: {
     position: "absolute", top: 1.6 * MM, left: 1.6 * MM, right: 1.6 * MM, bottom: 1.6 * MM,
-    borderWidth: 0.6, borderColor: "#333333", paddingHorizontal: 2.4 * MM, paddingTop: 2.2 * MM, paddingBottom: 1.6 * MM,
+    paddingHorizontal: 2.4 * MM, paddingTop: 2.2 * MM, paddingBottom: 1.6 * MM,
     alignItems: "center",
   },
   title: { fontFamily: LABEL_SERIF, fontSize: 15, letterSpacing: 1.6, textAlign: "center", color: "#111111" },
@@ -50,16 +47,18 @@ const s = StyleSheet.create({
   caption: { fontFamily: LABEL_SERIF, fontSize: 5, letterSpacing: 0.8, color: "#333333" },
   value: { fontFamily: LABEL_SERIF_ITALIC, fontSize: 10, marginTop: 0.4 * MM, color: "#111111" },
   mrp: { fontFamily: LABEL_SERIF, fontSize: 9, letterSpacing: 0.4, color: "#111111" },
-  rupee: { fontFamily: "LabelRupee", fontSize: 8.5 },
   bars: { width: "100%", height: 7.2 * MM, marginTop: 1.2 * MM, objectFit: "fill" },
   code: { fontFamily: LABEL_SERIF, fontSize: 5.6, letterSpacing: 0.8, marginTop: 0.6 * MM, color: "#111111" },
 });
 
-// Long colours ("Emerald Green") shrink to stay on one line in the half-width box.
+// Long colours ("Emerald Green") shrink to stay on one line in the half-width
+// box. Colour and size always print at the SAME size (client feedback): the
+// longer of the two decides.
 const valueSize = (text) => {
   const n = String(text || "").length;
   return n <= 9 ? 10 : n <= 13 ? 8 : n <= 17 ? 6.5 : 5.5;
 };
+const pairSize = (colour, size) => Math.min(valueSize(colour), valueSize(size));
 
 /**
  * @param {{ labels: Array<{ code, title, description, colour, size, mrp, image }> }} props
@@ -77,17 +76,17 @@ export default function PieceLabelPdf({ labels }) {
             <View style={s.pair}>
               <View style={s.half}>
                 <Text style={s.caption}>COLOUR</Text>
-                <Text style={[s.value, { fontSize: valueSize(l.colour) }]}>{l.colour}</Text>
+                <Text style={[s.value, { fontSize: pairSize(l.colour, l.size) }]}>{l.colour}</Text>
               </View>
               <View style={s.divider} />
               <View style={s.half}>
                 <Text style={s.caption}>SIZE</Text>
-                <Text style={s.value}>{l.size}</Text>
+                <Text style={[s.value, { fontSize: pairSize(l.colour, l.size) }]}>{l.size}</Text>
               </View>
             </View>
             <View style={s.rule} />
             {l.mrp ? (
-              <Text style={s.mrp}>MRP <Text style={s.rupee}>{"₹"}</Text>{l.mrp}</Text>
+              <Text style={s.mrp}>INR {l.mrp}</Text>
             ) : null}
             {l.image ? <Image style={s.bars} src={l.image} /> : null}
             <Text style={s.code}>{l.code}</Text>
