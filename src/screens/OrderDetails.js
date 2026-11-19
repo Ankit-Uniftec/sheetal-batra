@@ -174,6 +174,8 @@ export default function OrderDetails() {
   // To add a new code: append here. To deactivate: delete the entry.
   const SHOPMORE_CODES = {
     SHOPMORE28K: { amount: 2200, minSpend: 28000 },
+    // Client 2026-11-19: ₹3,200 off the total on ₹35,000 or more.
+    SHOPMORE35K: { amount: 3200, minSpend: 35000 },
     SHOPMORE45K: { amount: 4200, minSpend: 45000 },
     // Client 2026-11-14: stackable like the other SHOPMORE codes (with one % / birthday code).
     SHOPMORE120K: { amount: 10000, minSpend: 120000 },
