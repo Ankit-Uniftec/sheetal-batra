@@ -15,6 +15,12 @@ const CATEGORY_KEY_MAP = Object.fromEntries(
 const measurementCategories = Object.keys(CATEGORY_KEY_MAP);
 const measurementFields = MEASUREMENT_FIELDS;
 
+// "Custom" size: the client's own measurements instead of a standard size,
+// the same choice the order form offers next to the standard sizes.
+const CUSTOM_SIZE = "Custom";
+const hasAnyMeasurement = (m) =>
+  Object.values(m || {}).some((fields) => Object.values(fields || {}).some((v) => String(v ?? "").trim() !== ""));
+
 // Alteration type options
 const ALTERATION_TYPES = [
   { value: "Fitting Issue (Tightening Required)", label: "Fitting Issue (Tightening Required)" },
@@ -115,13 +121,16 @@ export default function AlterationModal({
       });
       setMeasurements(item?.measurements || {});
       setAttachments([]);
-      setShowMeasurements(false);
+      // A piece made in Custom size opens with its measurements showing.
+      setShowMeasurements(item?.size === CUSTOM_SIZE);
     }
   }, [isOpen, item, order]);
 
   // Handle form field change
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    // Custom size is measured: open the measurements for the SA to fill in.
+    if (field === "size" && value === CUSTOM_SIZE) setShowMeasurements(true);
   };
 
   // Handle address field change
@@ -222,6 +231,16 @@ export default function AlterationModal({
       // alert("Please select delivery date");
       return false;
     }
+    if (formData.size === CUSTOM_SIZE && !hasAnyMeasurement(measurements)) {
+      setShowMeasurements(true);
+      showPopup({
+        title: "Measurements Needed",
+        message: "Custom size needs the client's measurements. Please fill them in below.",
+        type: "warning",
+        confirmText: "Ok",
+      });
+      return false;
+    }
     if (formData.delivery_type === "Home Delivery") {
       if (!addressData.delivery_address || !addressData.delivery_city ||
         !addressData.delivery_state || !addressData.delivery_pincode) {
@@ -271,7 +290,10 @@ export default function AlterationModal({
   if (!isOpen || !item) return null;
 
   const category = getItemCategory(item);
-  const sizeOptions = sizeOptionsFor(category);
+  // Standard sizes, then Custom. A size the piece already has that is not in
+  // the list (an old spelling) is kept, so the dropdown never shows a wrong size.
+  const sizeOptions = [...sizeOptionsFor(category), CUSTOM_SIZE];
+  if (item.size && !sizeOptions.includes(item.size)) sizeOptions.unshift(item.size);
   const alterationNumber = existingAlterations.length + 1;
   const currentCategoryKey = CATEGORY_KEY_MAP[activeCategory];
 
