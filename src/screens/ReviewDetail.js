@@ -12,7 +12,7 @@ import { generateAllPdfs } from "../utils/pdfLazy";
 import { usePopup } from "../components/Popup";
 import { isOrderMode, clearOrderMode } from "../utils/orderMode";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
-import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
+import { canSendInvoiceOnWhatsApp, sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import AdvanceProofPicker from "../components/AdvanceProofPicker";
 import { uploadPendingAdvanceProofs } from "../utils/pendingAdvanceProof";
 import { logShippingWaiver } from "../utils/shippingWaiver";
@@ -765,7 +765,8 @@ export default function ReviewDetail() {
       // WhatsApp to client — Order Placed. Skipped when the SA chose not to send
       // the PDF, and when the PDF failed to generate: the template's only button
       // is the PDF link, so sending without a URL delivers a dead button.
-      if (sendPdfRef.current && pdfUrls?.customer_url) {
+      // No invoice on WhatsApp above ₹1,99,999 (client, temporary).
+      if (sendPdfRef.current && pdfUrls?.customer_url && canSendInvoiceOnWhatsApp(insertedOrder)) {
         sendWhatsApp({
           customerName: normalizedOrder.delivery_name,
           customerPhone: normalizedOrder.delivery_phone,

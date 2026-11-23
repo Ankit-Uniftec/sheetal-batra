@@ -115,6 +115,31 @@ const valueSize = (text) => {
 };
 const pairSize = (colour, size) => Math.min(valueSize(colour), valueSize(size));
 
+// Long names must never run into the line below (client, 23 Nov 2026: a
+// 4-line name crossed the divider). A name with no " - " arrives whole as the
+// title, so it is split like the client's format: the first word is the title,
+// the rest the description. Then both shrink to fit their space.
+// Rough widths: the text area is ~45 mm (128 pt); an Athelas capital is ~0.72 em.
+const TEXT_WIDTH = 120;
+const linesAt = (text, size, spacing, em) => {
+  const perLine = Math.max(1, Math.floor(TEXT_WIDTH / (size * em + spacing)));
+  let lines = 1; let used = 0;
+  String(text || "").split(/\s+/).filter(Boolean).forEach((w) => {
+    const need = used ? used + 1 + w.length : w.length;
+    if (need > perLine && used) { lines += 1; used = w.length; } else used = need;
+  });
+  return lines;
+};
+const splitName = (title, description) => {
+  const words = String(title || "").trim().split(/\s+/).filter(Boolean);
+  if (description || words.length < 3 || linesAt(title, 15, 1.6, 0.72) <= 1) return { title, description };
+  return { title: words[0], description: words.slice(1).join(" ") };
+};
+// Title: one line if it can, never more than two.
+const titleSize = (text) => [15, 13, 11.5, 10, 9, 8].find((f) => linesAt(text, f, f * 0.1, 0.72) <= (f >= 13 ? 1 : 2)) || 8;
+// Description: at most three lines.
+const descSize = (text) => [6.4, 5.8, 5.2].find((f) => linesAt(text, f, 0.3, 0.62) <= 3) || 5.2;
+
 /**
  * @param {{ labels: Array<{ code, title, description, colour, size, mrp, image }> }} props
  *   mrp is pre-formatted ("26,500"). The barcode is drawn from `code`.
@@ -122,11 +147,14 @@ const pairSize = (colour, size) => Math.min(valueSize(colour), valueSize(size));
 export default function PieceLabelPdf({ labels }) {
   return (
     <Document title="Piece labels">
-      {labels.map((l) => (
+      {labels.map((l) => {
+        const name = splitName(l.title, l.description);
+        const tSize = titleSize(name.title);
+        return (
         <Page key={l.code} size={{ width: SIZE, height: SIZE }} style={s.page}>
           <View style={s.frame}>
-            <Text style={s.title}>{l.title}</Text>
-            {l.description ? <Text style={s.desc}>{l.description}</Text> : null}
+            <Text style={[s.title, { fontSize: tSize, letterSpacing: tSize * 0.1 }]}>{name.title}</Text>
+            {name.description ? <Text style={[s.desc, { fontSize: descSize(name.description) }]}>{name.description}</Text> : null}
             <View style={s.rule} />
             <View style={s.pair}>
               <View style={s.half}>
@@ -147,7 +175,8 @@ export default function PieceLabelPdf({ labels }) {
             <Text style={s.code}>{l.code}</Text>
           </View>
         </Page>
-      ))}
+        );
+      })}
     </Document>
   );
 }
