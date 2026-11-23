@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { usePopup } from "../components/Popup";
 import { supabase } from "../lib/supabaseClient";
+import { orderNoLike, withLegacyOrderNo } from "../utils/orderNumberLookup";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { isSkuBarcode } from "../utils/barcodeKind";
 import { getWarehouseDate } from "../utils/warehouseDate";
@@ -65,11 +66,12 @@ const isMasterBarcode = (barcode) => !/-(TOP|BTM|DUP|EX\d+)\d*(?:-\d+)?$/i.test(
 // Look up the order a master barcode refers to. Returns null when nothing
 // matches, so each caller can raise its own error message.
 const findOrderByMasterBarcode = async (barcode) => {
-    const { data } = await supabase
+    // Old numbers too: a moved order's printed work order carries its old number.
+    const { data } = await withLegacyOrderNo((legacy) => supabase
         .from("orders")
         .select("id, order_no")
-        .ilike("order_no", `%${barcode}%`)
-        .limit(1);
+        .or(orderNoLike(`%${barcode}%`, legacy))
+        .limit(1));
     return data && data.length > 0 ? data[0] : null;
 };
 

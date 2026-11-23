@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { orderNoLike, withLegacyOrderNo } from "../utils/orderNumberLookup";
 import FactoryBadge from "./FactoryBadge";
 import {
   fetchComponentByBarcode,
@@ -138,8 +139,9 @@ const ProductionOverrides = ({ currentUserEmail, initialOrder = null }) => {
       const shopifyDigits = /^#?\d{3,7}$/.test(raw) ? raw.replace(/^#/, "") : null;
 
       const [byOrderNo, byShopify] = await Promise.all([
-        supabase.from("orders").select(cols).ilike("order_no", `%${likeTerm}%`)
-          .order("created_at", { ascending: false }).limit(20),
+        // Old numbers too (orders moved to another department keep theirs).
+        withLegacyOrderNo((legacy) => supabase.from("orders").select(cols).or(orderNoLike(`%${likeTerm}%`, legacy))
+          .order("created_at", { ascending: false }).limit(20)),
         shopifyDigits
           ? supabase.from("orders").select(cols).eq("shopify_order_name", `#${shopifyDigits}`).limit(20)
           : Promise.resolve({ data: [] }),

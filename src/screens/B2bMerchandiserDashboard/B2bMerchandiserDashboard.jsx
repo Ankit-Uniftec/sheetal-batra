@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { getItemCategory } from "../../utils/itemCategory";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
+import { orderNoLike, withLegacyOrderNo } from "../../utils/orderNumberLookup";
 import { fetchAllRows } from "../../utils/fetchAllRows";
 import "./B2bMerchandiserDashboard.css";
 import formatIndianNumber from "../../utils/formatIndianNumber";
@@ -786,18 +787,18 @@ export default function B2bMerchandiserDashboard() {
             // B2B only — the same set this dashboard lists (is_b2b = true). A
             // merchandiser cancels the orders they can see, never a store,
             // website or Comms order (meeting point 1 / D2, 2026-10-11).
-            const { data, error } = await supabase
+            const { data, error } = await withLegacyOrderNo((legacy) => supabase
                 .from("orders")
                 .select("*, vendors:vendor_id ( store_brand_name, vendor_code )")
                 .eq("is_b2b", true)
                 .or([
-                    `order_no.ilike.${like}`,
+                    orderNoLike(like, legacy),
                     `po_number.ilike.${like}`,
                     `delivery_name.ilike.${like}`,
                     `merchandiser_name.ilike.${like}`,
                 ].join(","))
                 .order("created_at", { ascending: false })
-                .limit(25);
+                .limit(25));
             if (error) throw error;
 
             // Product name lives inside the items jsonb array, which PostgREST
