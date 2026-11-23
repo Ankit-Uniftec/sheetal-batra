@@ -18,6 +18,7 @@ import StoreCalendarTab from "./StoreCalendarTab";
 import { getOrderStatusLabel, getStageLabel, getOrderProgressStatus, getOrderProgressStatusKey } from "../../utils/barcodeService";
 import PeriodFilter, { usePeriodFilter, periodLabel } from "../../components/PeriodFilter";
 import DashboardHeader from "../../components/DashboardHeader";
+import ClientTiersPanel from "../../components/ClientTiersPanel";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     PieChart, Pie, Cell, AreaChart, Area, Line
@@ -943,6 +944,7 @@ export default function StoreManagerDashboard() {
                             { key: "returns", label: "Returns & Issues" },
                             { key: "inventory", label: "Store Inventory" },
                             { key: "clients", label: "Client Book" },
+                            { key: "collectors_circle", label: "Collectors Circle" },
                             { key: "alterations", label: "Alterations" },
                             { key: "roster", label: "Store Roster" },
                         ].map(tab => (
@@ -1632,6 +1634,9 @@ export default function StoreManagerDashboard() {
                     )}
 
                     {/* ═══════════ TAB 6: CLIENT BOOK ═══════════ */}
+                    {/* Collectors Circle: this store's clients by tier (Release 39) */}
+                    {activeTab === "collectors_circle" && <div style={{ gridColumn: "1 / -1", minWidth: 0 }}><ClientTiersPanel title="Collectors Circle · Your Store" /></div>}
+
                     {activeTab === "clients" && (
                         <div>
                             <h2 className="sm-section-title">{storeLabel} Client Book</h2>

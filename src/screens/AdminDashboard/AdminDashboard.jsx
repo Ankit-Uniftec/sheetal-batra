@@ -29,6 +29,7 @@ import { totalNetSbRevenue } from "../../utils/exhibitionService";
 import { startOrderMode } from "../../utils/orderMode";
 import OverrideHistory from "../../components/OverrideHistory";
 import { cleanMerchandiserName } from "../../utils/merchandiserName";
+import ClientTiersPanel from "../../components/ClientTiersPanel";
 
 // Status options
 const ORDER_STATUS_OPTIONS = [
@@ -1841,6 +1842,7 @@ export default function AdminDashboard() {
                         <button className={`admin-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
                         <button className={`admin-nav-item ${activeTab === "accounts" ? "active" : ""}`} onClick={() => { setActiveTab("accounts"); setShowSidebar(false); }}>Accounts</button>
                         <button className={`admin-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
+                        <button className={`admin-nav-item ${activeTab === "collectors_circle" ? "active" : ""}`} onClick={() => { setActiveTab("collectors_circle"); setShowSidebar(false); }}>Collectors Circle</button>
                         <button className={`admin-nav-item ${activeTab === "walkins" ? "active" : ""}`} onClick={() => { setActiveTab("walkins"); setShowSidebar(false); }}>Walk-Ins</button>
                         <button className={`admin-nav-item ${activeTab === "sales_team" ? "active" : ""}`} onClick={() => { setActiveTab("sales_team"); setShowSidebar(false); }}>Sales Team</button>
                         <button className={`admin-nav-item ${activeTab === "sa_targets" ? "active" : ""}`} onClick={() => { setActiveTab("sa_targets"); setShowSidebar(false); }}>SA Targets</button>
@@ -3296,6 +3298,9 @@ export default function AdminDashboard() {
                             <Paginator page={accountsPage} totalPages={accountsTotalPages} onChange={setAccountsPage} />
                         </div>
                     )}
+
+                    {/* Collectors Circle: clients by tier (Release 39) */}
+                    {activeTab === "collectors_circle" && <div style={{ gridColumn: "1 / -1", minWidth: 0 }}><ClientTiersPanel /></div>}
 
                     {/* ═══════════════════════════════════════════════════ */}
                     {/* CLIENT BOOK TAB */}

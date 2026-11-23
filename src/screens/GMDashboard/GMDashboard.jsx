@@ -20,7 +20,8 @@ import { loadLedger, loadSales, loadStockOrders, loadStockRoomCatalogue } from "
 import Logo from "../../images/logo.png";
 import LogoLoader from "../../components/LogoLoader";
 import { shortInr } from "../CeoDashboard/ceoInsights";
-import { CalendarIcon, Chips, DateRange, Drawer, FilterGroup, GlobalSearch, Icon, MenuIcon, Select, Thumb, fullInr } from "../CeoDashboard/CeoUi";
+import { CalendarIcon, Chips, ClientsIcon, DateRange, Drawer, FilterGroup, GlobalSearch, Icon, MenuIcon, Select, Thumb, fullInr } from "../CeoDashboard/CeoUi";
+import ClientTiersPanel from "../../components/ClientTiersPanel";
 import "../CeoDashboard/CeoMakeover.css";
 import "./GMDashboard.css";
 import "./GmMakeover.css";
@@ -52,7 +53,7 @@ const DeliveryIcon = () => (
     <path d="M2 7h11v9H2zM13 10h4l3 3v3h-7" strokeLinejoin="round" /><circle cx="6" cy="17.5" r="1.8" /><circle cx="16.5" cy="17.5" r="1.8" />
   </svg>
 );
-const CUSTOM_ICONS = { approval: ApprovalIcon, delivery: DeliveryIcon };
+const CUSTOM_ICONS = { approval: ApprovalIcon, delivery: DeliveryIcon, clients: ClientsIcon };
 
 const NAV = [
   {
@@ -61,6 +62,7 @@ const NAV = [
       { id: "store_performance", label: "Store Performance", icon: "overview" },
       { id: "b2b_overview", label: "B2B Overview", icon: "transfer" },
       { id: "outstanding", label: "Client Outstanding", icon: "inr" },
+      { id: "collectors_circle", label: "Collectors Circle", icon: "clients" },
       { id: "inventory", label: "Inventory Health", icon: "products" },
       { id: "returns", label: "Returns & Analytics", icon: "receive" },
     ],
@@ -372,6 +374,7 @@ export default function GMDashboard() {
                 {activeTab === "store_performance" && <StorePerformancePage ctx={ctx} />}
                 {activeTab === "b2b_overview" && <B2bPage ctx={ctx} />}
                 {activeTab === "outstanding" && <OutstandingPage ctx={ctx} />}
+                {activeTab === "collectors_circle" && <div className="ceo-page"><ClientTiersPanel /></div>}
                 {activeTab === "inventory" && <InventoryPage ctx={ctx} />}
                 {activeTab === "returns" && <ReturnsPage ctx={ctx} />}
                 {activeTab === "orders" && <OrdersPage ctx={ctx} />}

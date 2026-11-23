@@ -21,6 +21,7 @@ import {
 } from "recharts";
 import { startOrderMode } from "../../utils/orderMode";
 import DashboardHeader from "../../components/DashboardHeader";
+import ClientTiersPanel from "../../components/ClientTiersPanel";
 
 const COLOR_NAME_MAP = {
   black: "#1a1a1a", white: "#f5f5f5", red: "#c62828", blue: "#1565c0",
@@ -950,6 +951,7 @@ export default function AssistantCmoDashboard() {
             <button className={`acmo-nav-item ${activeTab === "clients" ? "active" : ""}`} onClick={() => { setActiveTab("clients"); setShowSidebar(false); }}>Client Insights</button>
             <button className={`acmo-nav-item ${activeTab === "orders" ? "active" : ""}`} onClick={() => { setActiveTab("orders"); setShowSidebar(false); }}>Orders</button>
             <button className={`acmo-nav-item ${activeTab === "client_book" ? "active" : ""}`} onClick={() => { setActiveTab("client_book"); setShowSidebar(false); }}>Client Book</button>
+            <button className={`acmo-nav-item ${activeTab === "collectors_circle" ? "active" : ""}`} onClick={() => { setActiveTab("collectors_circle"); setShowSidebar(false); }}>Collectors Circle</button>
             <button className={`acmo-nav-item ${activeTab === "walkins" ? "active" : ""}`} onClick={() => { setActiveTab("walkins"); setShowSidebar(false); }}>Walk-Ins</button>
             <button className={`acmo-nav-item ${activeTab === "inventory" ? "active" : ""}`} onClick={() => { setActiveTab("inventory"); setShowSidebar(false); }}>Inventory</button>
             {currentUserProfile?.can_place_stock_orders && (
@@ -1504,6 +1506,9 @@ export default function AssistantCmoDashboard() {
               </>
             );
           })()}
+
+          {/* Collectors Circle: clients by tier (Release 39) */}
+          {activeTab === "collectors_circle" && <div style={{ gridColumn: "1 / -1", minWidth: 0 }}><ClientTiersPanel /></div>}
 
           {/* ==================== CLIENT BOOK ==================== */}
           {activeTab === "client_book" && (() => {
