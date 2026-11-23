@@ -91,7 +91,7 @@
 
 /* Collectors Circle tier on the gold banner */
 .oh-customer-tier { margin-top: 2px; }
-.oh-customer-tier .sb-tier-detail { color: #ffffff; opacity: 0.95; }
+.oh-customer-tier .sb-tier-detail { color: #ffffff !important; opacity: 0.95; }
 
 .oh-order-count {
   background: rgba(255, 255, 255, 0.2);

@@ -12,7 +12,10 @@ export default function TierBadge({ tier, detail = false, short = false }) {
     + (tier.nextTierName ? `. Rs ${formatIndianNumber(tier.toNext)} more to ${tier.nextTierName}.` : ".");
   return (
     <span className={`sb-tier${detail ? " has-detail" : ""}`} title={info}>
-      <span className={`sb-tier-pill is-${tier.tierCode}`}>{name}</span>
+      <span className={`sb-tier-pill is-${tier.tierCode}`}>
+        {tier.tierCode === "collector" && <span className="sb-tier-mark" aria-hidden="true">◆</span>}
+        {name}
+      </span>
       {detail && (
         <span className="sb-tier-detail">
           ₹{formatIndianNumber(tier.spend)} in 12 months
