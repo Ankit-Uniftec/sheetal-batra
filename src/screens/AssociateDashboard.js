@@ -33,6 +33,8 @@ import { usePeriodFilter } from "../components/PeriodFilter";
 import DashboardHeader from "../components/DashboardHeader";
 import SaInventory from "./StockRoom/SaInventory";
 import { releaseAllHeld } from "../utils/stockPieces";
+import { fetchClientTiers } from "../utils/clientTier";
+import TierBadge from "../components/TierBadge";
 
 // Time calculation helpers
 const getHoursSinceOrder = (createdAt) => {
@@ -91,6 +93,7 @@ export default function Dashboard() {
   const [enteredPassword, setEnteredPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [clients, setClients] = useState([]);
+  const [clientTiers, setClientTiers] = useState({}); // Collectors Circle tier per client account
   const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [clientsLoading, setClientsLoading] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
@@ -391,6 +394,7 @@ export default function Dashboard() {
       }));
 
       setClients(finalClients);
+      fetchClientTiers(finalClients.map((c) => c.user_id)).then(setClientTiers);
     }
 
     setClientsLoading(false);
@@ -1999,6 +2003,7 @@ export default function Dashboard() {
                       <tr>
                         <th>Name</th>
                         <th>Phone</th>
+                        <th>Tier</th>
                         {/* <th>Points</th> */}
                         <th>Action</th>
                       </tr>
@@ -2008,6 +2013,7 @@ export default function Dashboard() {
                         <tr key={i}>
                           <td data-label="Name">{c.name}</td>
                           <td data-label="Phone">{c.phone}</td>
+                          <td data-label="Tier">{clientTiers[c.user_id] ? <TierBadge tier={clientTiers[c.user_id]} short /> : <span className="ad-muted">—</span>}</td>
                           {/* <td data-label="Points" style={{ color: c.loyalty_points > 0 ? '#e65100' : '#999' }}>
                             {c.loyalty_points > 0 ? `${c.loyalty_points} pts` : '0'}
                           </td> */}

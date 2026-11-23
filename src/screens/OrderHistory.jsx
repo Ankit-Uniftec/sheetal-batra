@@ -24,6 +24,8 @@ import UpdatePaymentModal from "../components/UpdatePaymentModal";
 import { canUpdatePayment, recordPayment, paymentRecordedPopup } from "../utils/recordPayment";
 import DeliveryPaymentModal from "../components/DeliveryPaymentModal";
 import { canMarkDelivered, isDirectDelivery, markOrderDelivered, confirmDelivery } from "../utils/deliverOrder";
+import { fetchClientTiers } from "../utils/clientTier";
+import TierBadge from "../components/TierBadge";
 
 // Status filter helpers — mirror getStatusText/getStatusClass normalization.
 const STATUS_FILTER_LABELS = {
@@ -278,6 +280,16 @@ export default function OrderHistory() {
   const customerName = customerFromState?.name || profile?.full_name || "Customer";
   const customerEmail = customerFromState?.email || profile?.email || "";
   const customerPhone = customerFromState?.phone || profile?.phone || "";
+
+  // Collectors Circle tier of the client whose orders these are (staff view).
+  const [clientTier, setClientTier] = useState(null);
+  const tierClientId = fromAssociate ? customerFromState?.user_id : null;
+  useEffect(() => {
+    let off = false;
+    if (!tierClientId) { setClientTier(null); return undefined; }
+    fetchClientTiers([tierClientId]).then((m) => { if (!off) setClientTier(m[tierClientId] || null); });
+    return () => { off = true; };
+  }, [tierClientId]);
 
   // Image URL helper
   const publicImageUrl = (src) => {
@@ -1618,6 +1630,7 @@ export default function OrderHistory() {
           <div className="oh-customer-left">
             <span className="oh-customer-name">{customerName}</span>
             <span className="oh-customer-contact">{customerEmail} {customerPhone && `• ${formatPhoneNumber(customerPhone)}`}</span>
+            {clientTier && <span className="oh-customer-tier"><TierBadge tier={clientTier} detail /></span>}
           </div>
           <div className="oh-customer-right">
             <span className="oh-order-count">{orders.length} Order(s)</span>
