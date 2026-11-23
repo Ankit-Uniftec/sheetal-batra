@@ -41,7 +41,18 @@ export default function ClientTiersPanel({ title = "Collectors Circle" }) {
 
   useEffect(() => {
     let off = false;
-    supabase.rpc("client_tier_list").then(({ data, error: e }) => {
+    // Supabase returns at most 1,000 rows per call: read the list in pages,
+    // in a fixed order so no client is skipped or repeated.
+    const loadAll = async () => {
+      const all = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error: e } = await supabase.rpc("client_tier_list").order("profile_id").range(from, from + 999);
+        if (e) return { error: e };
+        all.push(...(data || []));
+        if (!data || data.length < 1000) return { data: all };
+      }
+    };
+    loadAll().then(({ data, error: e }) => {
       if (off) return;
       if (e) { setError(e.message || "Could not load the client tiers."); setRows([]); return; }
       setRows((data || []).map((r) => ({
