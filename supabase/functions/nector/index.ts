@@ -58,7 +58,8 @@ async function nectorGet(path: string, query: Record<string, string> = {}) {
 const mobileVariants = (raw: string) => {
   const d = String(raw || "").replace(/\D/g, "");
   const ten = d.slice(-10);
-  return [...new Set([raw.trim(), d, ten, `91${ten}`, `+91${ten}`].filter((v) => v && v.replace(/\D/g, "").length >= 10))];
+  // Nector matched the plain 10-digit number in tests (23 Nov 2026): try it first.
+  return [...new Set([ten, `91${ten}`, `+91${ten}`, d, raw.trim()].filter((v) => v && v.replace(/\D/g, "").length >= 10))];
 };
 const PLACEHOLDER_ID = "00000000-0000-4000-8000-000000000000"; // lookup key goes in the query
 
@@ -134,7 +135,9 @@ Deno.serve(async (req) => {
           },
         });
       }
-      if (r.status !== 404 && r.status !== 400 && !r.ok) {
+      // "Lead does not exists" comes back as 422: try the next format.
+      const notFound = r.status === 404 || r.status === 400 || /not exist/i.test(String(r.body?.data?.message || ""));
+      if (!r.ok && !notFound) {
         return json({ error: "Nector refused the request.", status: r.status, nector: r.body?.message || r.body }, 502);
       }
     }
