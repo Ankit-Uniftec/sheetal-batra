@@ -21,8 +21,9 @@ export const MEASUREMENT_FIELDS = {
     "Waist", "Hip", "Length", "Front Cross", "Back Cross",
   ],
   // Blouse / Choli
+  // Sleeves added at the client's request (23 Nov 2026).
   Blouse: [
-    "Shoulder", "Upper Bust", "Bust", "Dart Point", "Waist", "Length",
+    "Shoulder", "Upper Bust", "Bust", "Dart Point", "Sleeves", "Waist", "Length",
     "Front Cross", "Back Cross", "Front Neck", "Back Neck",
   ],
   // Short Anarkali / Long Anarkali / Angrakha

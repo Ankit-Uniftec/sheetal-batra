@@ -587,6 +587,10 @@ export default function ProductForm() {
   // Flag to track if data was restored from sessionStorage
   // const [isRestored, setIsRestored] = useState(false);
   const isRestoredRef = useRef(false);
+  // The product whose defaults (dupatta) were last applied. The defaults effect
+  // also re-runs when colours / extras / saved measurements finish loading; it
+  // must not reset the SA's choices for the SAME product (e.g. after Back).
+  const defaultsForProductRef = useRef(null);
 
   // ==================== RELEASE 35: SCAN A PIECE LABEL ====================
   // Scanning a label (NAS-RED-ST-L-001) picks the product and fills size and
@@ -1056,6 +1060,7 @@ export default function ProductForm() {
 
         // Size & Quantity
         if (draftData.selectedSize) setSelectedSize(draftData.selectedSize);
+        defaultsForProductRef.current = draftData.selectedProduct?.id ?? null;
         if (draftData.quantity) setQuantity(draftData.quantity);
         if (draftData.availableSizes) setAvailableSizes(draftData.availableSizes);
 
@@ -1147,6 +1152,7 @@ export default function ProductForm() {
 
         // Size & Quantity
         if (data.selectedSize) setSelectedSize(data.selectedSize);
+        defaultsForProductRef.current = data.selectedProduct?.id ?? null;
         if (data.quantity) setQuantity(data.quantity);
         if (data.availableSizes) setAvailableSizes(data.availableSizes);
 
@@ -1547,6 +1553,7 @@ export default function ProductForm() {
       setShowAdditionals(true);
       setQuantity(1);
       setMeasurements({});
+      defaultsForProductRef.current = null;
       setIsSyncProduct(false);
       setProductVariants([]);
       setLocalInventory({});
@@ -1577,8 +1584,12 @@ export default function ProductForm() {
 
     // Pre-fill the dupatta toggle from the product. Staff can still override
     // before adding to the cart (e.g. a customer who declines the dupatta).
-    setIncludesDupatta(selectedProduct.has_dupatta === true);
-    setSelectedDupattaColor(selectedProduct.default_dupatta_color || "");
+    // Only when the product itself changes: not on a re-run for the same product.
+    if (defaultsForProductRef.current !== selectedProduct.id) {
+      defaultsForProductRef.current = selectedProduct.id;
+      setIncludesDupatta(selectedProduct.has_dupatta === true);
+      setSelectedDupattaColor(selectedProduct.default_dupatta_color || "");
+    }
 
     // Set product options. Release 38: made-to-order offers ALL tops / bottoms
     // (the product's default is pre-selected below, the SA may change it);
@@ -1607,8 +1618,11 @@ export default function ProductForm() {
       setAvailableSizes(newAvailableSizes);
 
       // Only set default size if current size is not in new sizes
+      // Custom is always allowed (it is never in a product's size list): keeping
+      // it is what stops the custom measurements being replaced by size-chart
+      // values when the SA comes Back to this page (client, 23 Nov 2026).
       setSelectedSize((currentSize) => {
-        if (newAvailableSizes.includes(currentSize)) {
+        if (currentSize === CUSTOM_SIZE || newAvailableSizes.includes(currentSize)) {
           return currentSize;
         }
         return isKidsProduct

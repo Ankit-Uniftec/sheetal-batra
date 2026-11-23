@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getItemCategory, sizeOptionsFor, CATEGORY_KIDS } from "../utils/itemCategory";
 import { supabase } from "../lib/supabaseClient";
 import { NOTIFICATION_TYPES, sendNotification } from "../utils/notificationService";
-import { sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
+import { canSendInvoiceOnWhatsApp, sendWhatsApp, WA_TEMPLATES } from "../utils/whatsappService";
 import { fetchLinePieces } from "../utils/breakdownChangeApi";
 import { planPieceSync, previewMoney, pieceLock, planToRpcArgs } from "../utils/orderPieceEdit";
 import "../screens/OrderHistory.css";
@@ -272,7 +272,8 @@ export default function EditOrderModal({
         ? { type: "warning", title: "Order Updated", message: "The order was updated, but the reason for the edit could not be saved. Please tell the admin.", confirmText: "OK" }
         : { type: "success", title: "Order Updated", message: pieceChanged ? "Order has been updated. The pieces changed, so please reprint the work order." : "Order has been updated successfully!", confirmText: "OK" });
 
-      if (notifyCustomer) {
+      // The edited-order message carries the invoice: not above ₹1,99,999 (client, temporary).
+      if (notifyCustomer && canSendInvoiceOnWhatsApp(freshOrder || order)) {
         sendWhatsApp({
           customerName: order.delivery_name,
           customerPhone: order.delivery_phone,
