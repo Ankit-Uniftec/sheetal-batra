@@ -1,8 +1,25 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Topline, ProductCell, Badge } from "./StockRoomUi";
 import { formatUnits, formatDay, sizeLabel, TYPE_LABELS, REASON_LABELS, productType } from "./stockRoomModel";
 import { retryShopify, SHOPIFY_SYNC_ON } from "./stockRoomShopify";
 import { loadShopifyStockIssues, loadShopifySyncState, retryShopifyChange } from "../../utils/shopifyInventory";
+
+// Click a design anywhere on this screen to open it (stock, sizes, editor)
+// and fix it there (client, 25 Nov 2026), instead of finding it again in
+// Catalogue or Stock.
+const OpenDesign = createContext(null);
+function DesignCell({ product }) {
+  const ctx = useContext(OpenDesign);
+  if (!product) return "Product no longer live";
+  if (!ctx?.open || !ctx.rowsById?.[product.id]) return <ProductCell product={product} />;
+  return (
+    <button type="button" className="sri-open" title="Open this design to fix it"
+      onClick={(e) => { e.stopPropagation(); ctx.open(product.id); }}>
+      <ProductCell product={product} />
+      <span className="sri-open-cue">Open ›</span>
+    </button>
+  );
+}
 
 // Findings in the existing product data. Each section names the rows so they
 // can be corrected: most in the product editor (click the row), an impossible
@@ -51,7 +68,7 @@ function Rows({ sectionKey, items, onRecount, rowsById }) {
   if (sectionKey === "duplicateShopifyIds") {
     return items.flatMap((dup) => dup.products.map((p) => (
       <tr key={`${dup.shopifyId}-${p.id}`} data-product={p.id}>
-        <td className="is-primary"><ProductCell product={p} /></td>
+        <td className="is-primary"><DesignCell product={p} /></td>
         <td data-label="Shared Shopify ID" className="sr-mono wrap">{dup.shopifyId}</td>
         <td data-label="Store">{p.store_category || "All Stores"}</td>
         <td data-label="On hand" className="n">{rowsById?.[p.id]?.stock.tracked ? formatUnits(rowsById[p.id].stock.total) : "—"}</td>
@@ -61,7 +78,7 @@ function Rows({ sectionKey, items, onRecount, rowsById }) {
   if (sectionKey === "invalidVariants") {
     return items.map(({ product, size, qty }, i) => (
       <tr key={`${product.id}-${size}-${i}`}>
-        <td className="is-primary"><ProductCell product={product} /></td>
+        <td className="is-primary"><DesignCell product={product} /></td>
         <td data-label="Size">{size}</td>
         <td data-label="Stored count" className="n">{formatUnits(qty)}</td>
         <td>{onRecount && <button type="button" className="sr-rowbtn" onClick={() => onRecount(product.id, size)}>Recount</button>}</td>
@@ -71,7 +88,7 @@ function Rows({ sectionKey, items, onRecount, rowsById }) {
   if (sectionKey === "duplicateSizes") {
     return items.map(({ product, sizes }) => (
       <tr key={product.id} data-product={product.id}>
-        <td className="is-primary"><ProductCell product={product} /></td>
+        <td className="is-primary"><DesignCell product={product} /></td>
         <td data-label="Stored more than once" className="wrap is-wide">
           <span className="sr-szc-list">
             {sizes.map(({ size, counts }) => (
@@ -84,7 +101,7 @@ function Rows({ sectionKey, items, onRecount, rowsById }) {
   }
   return items.map((p) => (
     <tr key={p.id} data-product={p.id}>
-      <td className="is-primary"><ProductCell product={p} /></td>
+      <td className="is-primary"><DesignCell product={p} /></td>
       <td data-label="Type">{TYPE_LABELS[productType(p)]}</td>
       {sectionKey !== "lxrtsWithoutVariants" && (
         <td data-label={sectionKey === "malformedShopifyIds" ? "Stored ID" : "Stored count"} className="sr-mono">
@@ -162,7 +179,7 @@ function ShopifyUnsent({ view, canWrite, onShopifyRetried }) {
               const p = view.productsById[m.product_id];
               return (
                 <tr key={m.id}>
-                  <td className="is-primary">{p ? <ProductCell product={p} /> : "Product no longer live"}</td>
+                  <td className="is-primary"><DesignCell product={p} /></td>
                   <td data-label="When">{formatDay(m.occurred_at)}</td>
                   <td data-label="Type">{REASON_LABELS[m.reason] || m.reason}</td>
                   <td data-label="Size">{m.size ? sizeLabel(m.size) : "—"}</td>
@@ -238,7 +255,7 @@ function ShopifySyncIssues({ view, canWrite, onShopifyRetried }) {
                 const change = m.action === "set" ? `set to ${m.requested_quantity}` : `${m.requested_change > 0 ? "+" : ""}${m.requested_change}`;
                 return (
                   <tr key={m.id}>
-                    <td className="is-primary">{p ? <ProductCell product={p} /> : "Product no longer live"}</td>
+                    <td className="is-primary"><DesignCell product={p} /></td>
                     <td data-label="When">{formatDay(m.created_at)}</td>
                     <td data-label="From">{SOURCE_LABEL[m.source] || m.source || "—"}{m.order_no ? ` · ${m.order_no}` : ""}</td>
                     <td data-label="Size">{m.size ? sizeLabel(m.size) : "—"}</td>
@@ -260,14 +277,14 @@ function ShopifySyncIssues({ view, canWrite, onShopifyRetried }) {
   );
 }
 
-export default function IntegrityScreen({ view, canWrite, canEditProducts, openEditor, openAction, onShopifyRetried }) {
+export default function IntegrityScreen({ view, canWrite, canEditProducts, openEditor, openAction, openProduct, onShopifyRetried }) {
   const recount = canWrite ? (productId, size) => openAction("adjust", { locationId: "", lines: [{ productId, size }] }) : null;
   const { findings } = view;
   const withItems = SECTIONS.filter((s) => findings[s.key].length);
   const unsent = view.ledger?.installed ? view.ledger.shopifyUnsent.length : 0;
 
   return (
-    <>
+    <OpenDesign.Provider value={{ open: openProduct, rowsById: view.rowsById }}>
       <Topline title="Integrity"
         sub={view.integrityTotal || unsent
           ? `${formatUnits(view.integrityTotal)} findings in the product data${unsent ? ` · ${formatUnits(unsent)} Shopify changes not sent` : ""}`
@@ -310,6 +327,6 @@ export default function IntegrityScreen({ view, canWrite, canEditProducts, openE
           <div className="sr-card"><p className="sr-empty">Every check passes: Shopify IDs are unique and valid, every LXRTS size has one sensible count, and every LXRTS design has sizes.</p></div>
         )}
       </div>
-    </>
+    </OpenDesign.Provider>
   );
 }
