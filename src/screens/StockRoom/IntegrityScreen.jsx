@@ -107,6 +107,19 @@ const HEADS = {
 
 const SHOPIFY_LABEL = { pending: "Not settled", not_sent: "Not sent", failed: "Failed" };
 
+// What the team should do about a line Shopify refused, in plain words
+// (client, 25 Nov 2026: "it shows an error, not clear what to do").
+function shopifyFix(m, product) {
+  const err = String(m.shopify_error || "");
+  if (!product?.shopify_product_id) return "This design is app-only (not on Shopify): nothing to send. It will clear by itself.";
+  if (/not linked to a Shopify variant/i.test(err)) return "This size is missing on Shopify. Add the size to the design in Shopify admin (or check the size name matches), then send again.";
+  if (/no inventory item|not stocked/i.test(err)) return "In Shopify admin, open this size and turn on Track quantity (stocked at the LXRTS location), then send again.";
+  if (/several Shopify locations/i.test(err)) return "This size is stocked at more than one Shopify location. Ask the developer to set the LXRTS location.";
+  if (/No answer from Shopify|kept changing|timed? ?out|fetch/i.test(err)) return "Shopify did not answer. Check this size's stock on Shopify, then send again.";
+  if (m.shopify_status === "failed") return err ? `Shopify said: ${err}` : "Shopify refused the change. Check the design on Shopify, then send again.";
+  return "Not sent yet: press Send to Shopify now.";
+}
+
 function ShopifyUnsent({ view, canWrite, onShopifyRetried }) {
   const ledger = view.ledger;
   const [sending, setSending] = useState(false);
@@ -138,12 +151,12 @@ function ShopifyUnsent({ view, canWrite, onShopifyRetried }) {
       </div>
       <p className="sr-card-sub">
         {SHOPIFY_SYNC_ON
-          ? "These LXRTS stock changes were saved here but did not reach Shopify, so the order form may still show the old stock. Send them, or correct Shopify by hand."
+          ? "These LXRTS stock changes were saved here but did not reach Shopify, so the website may still show the old stock. Each line says what to do; after fixing it on Shopify, press Send to Shopify now."
           : "Shopify is not updated from this environment, so these LXRTS changes were saved here only. That is expected while testing: the live store is untouched."}
       </p>
       <div className="sr-scroller">
-        <table className="sr-table sr-rtable" style={{ "--sr-table-min": "820px" }}>
-          <thead><tr><th>Design</th><th>When</th><th>Type</th><th>Size</th><th className="n">Shopify should change by</th><th>Status</th></tr></thead>
+        <table className="sr-table sr-rtable" style={{ "--sr-table-min": "1080px" }}>
+          <thead><tr><th>Design</th><th>When</th><th>Type</th><th>Size</th><th className="n">Shopify should change by</th><th>Status</th><th>What to do</th></tr></thead>
           <tbody>
             {rows.slice(0, 50).map((m) => {
               const p = view.productsById[m.product_id];
@@ -155,6 +168,7 @@ function ShopifyUnsent({ view, canWrite, onShopifyRetried }) {
                   <td data-label="Size">{m.size ? sizeLabel(m.size) : "—"}</td>
                   <td data-label="Change" className={`n tot ${m.legacy_delta > 0 ? "sr-pos" : "sr-neg"}`}>{m.legacy_delta > 0 ? "+" : ""}{m.legacy_delta}</td>
                   <td data-label="Status" title={m.shopify_error || undefined}><Badge tone={m.shopify_status === "failed" ? "crit" : "low"}>{SHOPIFY_LABEL[m.shopify_status]}</Badge></td>
+                  <td data-label="What to do" className="wrap" style={{ minWidth: 260, fontSize: 13 }}>{shopifyFix(m, p)}</td>
                 </tr>
               );
             })}
