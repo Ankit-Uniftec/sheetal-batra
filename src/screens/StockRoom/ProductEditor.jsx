@@ -8,7 +8,7 @@ import {
 import { readShopifyStock } from "./stockRoomShopify";
 import { checkDuplicateName, SIZE_OPTIONS } from "../../components/AddProduct/csvHelpers";
 import { STORE_CATEGORIES, DEFAULT_STORE_CATEGORY } from "../../utils/storeCategory";
-import { normalizeShopifyId } from "../../utils/shopifyInventory";
+import { normalizeShopifyId, shopifyNumber } from "../../utils/shopifyInventory";
 import {
   formatUnits, isInvalidCount, UNLIMITED_SENTINEL, TYPE_LXRTS, TYPE_CUSTOM, TYPE_MTO, TYPE_LABELS, productType,
 } from "./stockRoomModel";
@@ -109,7 +109,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
         setDefaultColor(product.default_color || "");
         setHasDupatta(product.has_dupatta ? "yes" : "no");
         setDupattaColor(product.default_dupatta_color || "");
-        setShopifyId(product.shopify_product_id || "");
+        setShopifyId(shopifyNumber(product.shopify_product_id));
         setCollectionIds(ledger?.collectionsByProduct?.[productId] || []);
 
         const next = Object.fromEntries(OFFERED_SIZES.map((s) => [s, blankSize(false)]));
@@ -127,7 +127,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
             const row = mark(size);
             row.on = true;
             row.ids = sorted.map((v) => v.id);
-            row.vid = sorted[0].shopify_variant_id || "";
+            row.vid = shopifyNumber(sorted[0].shopify_variant_id);
             row.onHand = isInvalidCount(sorted[0].inventory) ? 0 : sorted[0].inventory;
             row.invalid = isInvalidCount(sorted[0].inventory);
           });
@@ -211,7 +211,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
   const shopifyHelp = (() => {
     if (!shopifyId.trim()) return { text: "Checked against every existing design before saving." };
     const gid = normalizeShopifyId(shopifyId, "Product");
-    if (!/^gid:\/\/shopify\/Product\/\d+$/.test(gid)) return { text: "Enter the number from Shopify, or its gid://shopify/Product/… form.", tone: "warn" };
+    if (!/^gid:\/\/shopify\/Product\/\d+$/.test(gid)) return { text: "Enter the product number from Shopify (the digits at the end of its admin link).", tone: "warn" };
     const clash = otherShopifyUsers(gid)[0];
     return clash
       ? { text: `Already used by “${clash.product.name}” — sync would write to whichever row it read first.`, tone: "crit" }
@@ -236,7 +236,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
     if (type === TYPE_LXRTS) {
       const gid = normalizeShopifyId(shopifyId, "Product");
       if (!shopifyId.trim()) return "An LXRTS design needs its Shopify product ID.";
-      if (!/^gid:\/\/shopify\/Product\/\d+$/.test(gid)) return "Enter the Shopify product ID (the number from Shopify, or its gid://shopify/Product/… form).";
+      if (!/^gid:\/\/shopify\/Product\/\d+$/.test(gid)) return "Enter the Shopify product number (the digits at the end of its admin link).";
       const clash = otherShopifyUsers(gid)[0];
       if (clash) return `Shopify ID already belongs to “${clash.product.name}”. Two designs cannot share one ID — that is what breaks the sync.`;
       const seen = new Set();

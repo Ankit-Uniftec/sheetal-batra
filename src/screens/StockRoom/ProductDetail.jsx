@@ -4,6 +4,7 @@ import {
   formatUnits, formatInr, formatDay, sizeLabel, sortSizes, canonicalSize, productFacts, SIZE_SCALE,
   REASON_LABELS, TYPE_LABELS, TYPE_LXRTS, TYPE_CUSTOM,
 } from "./stockRoomModel";
+import { shopifyNumber } from "../../utils/shopifyInventory";
 
 const plural = (n, word) => `${formatUnits(n)} ${word}${Number(n) === 1 ? "" : "s"}`;
 const listText = (v) => (Array.isArray(v) ? v.filter(Boolean).join(", ") : String(v || "").trim());
@@ -117,7 +118,7 @@ export default function ProductDetail({ row, view, warehousesById, salesDays = 9
       <Badge tone="plain">{TYPE_LABELS[row.type]}</Badge>
       <Badge tone="plain">{(p.store_category || "").trim() || "All Stores"}</Badge>
       <StockBadge status={row.status} />
-      {row.type === TYPE_LXRTS && <span className="sr-mono">{p.shopify_product_id || "No Shopify ID"}</span>}
+      {row.type === TYPE_LXRTS && <span className="sr-mono">{p.shopify_product_id ? `Shopify ${shopifyNumber(p.shopify_product_id)}` : "No Shopify ID"}</span>}
       {collections.map((c) => <Badge key={c.id} tone="gold">{c.name}</Badge>)}
     </>
   );
@@ -314,7 +315,7 @@ export default function ProductDetail({ row, view, warehousesById, salesDays = 9
                 {variants.flatMap(({ size, rows: vs }) => vs.map((v, i) => (
                   <tr key={v.id}>
                     <td>{sizeLabel(size)}{vs.length > 1 && <span className="sr-muted"> · copy {i + 1} of {vs.length}</span>}</td>
-                    <td className="sr-mono">{v.shopify_variant_id || <span className="sr-muted">None</span>}</td>
+                    <td className="sr-mono">{v.shopify_variant_id ? shopifyNumber(v.shopify_variant_id) : <span className="sr-muted">None</span>}</td>
                     <td className={`n${row.stock.invalidSizes.includes(size) && !(Number(v.inventory) >= 0 && Number(v.inventory) < 9999) ? " sr-cell-invalid" : ""}`}>{formatUnits(v.inventory)}</td>
                   </tr>
                 )))}

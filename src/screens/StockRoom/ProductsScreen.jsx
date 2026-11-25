@@ -7,6 +7,7 @@ import { FormSection, PField, FieldRow, Combo } from "./ProductFormUi";
 import { formatUnits, formatInr, sizeLabel, SIZE_SCALE, CUSTOM_SIZE, TYPE_LABELS, TYPE_LXRTS, TYPE_CUSTOM, TYPE_MTO } from "./stockRoomModel";
 import { loadProductsForExport } from "./stockRoomData";
 import { CSV_COLUMNS, buildCsv, downloadCsv } from "../../components/AddProduct/csvHelpers";
+import { shopifyNumber } from "../../utils/shopifyInventory";
 
 // The Shopify ID moved into the product's detail view: a 34-character GID in
 // every row pushed the useful columns off-screen on anything but a wide monitor.
@@ -262,7 +263,7 @@ export default function ProductsScreen({ view, openProduct, canEditProducts, ope
               <tbody>
                 {visible.map((r) => {
                   const p = r.product;
-                  const sid = String(p.shopify_product_id || "");
+                  const sid = shopifyNumber(p.shopify_product_id);
                   const typeCell = r.type === TYPE_LXRTS
                     ? <span title={sid || "No Shopify ID"}>LXRTS{!sid && <span className="sr-muted"> · no Shopify ID</span>}</span>
                     : TYPE_LABELS[r.type];

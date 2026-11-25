@@ -40,6 +40,13 @@ export const SHOPIFY_DRY_RUN = process.env.NODE_ENV !== "production";
  * Idempotent: a GID is returned untouched. A bare number becomes a GID of
  * `type`. Anything else comes back trimmed and unchanged — never blanked.
  */
+/** The number people see in Shopify (8342119447), from a stored gid://shopify/…/8342119447. */
+export function shopifyNumber(value) {
+  const raw = String(value ?? "").trim();
+  const m = raw.match(/^gid:\/\/shopify\/[A-Za-z]+\/(\d+)$/);
+  return m ? m[1] : raw;
+}
+
 export function normalizeShopifyId(value, type = "Product") {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
