@@ -128,7 +128,7 @@ const SHOPIFY_LABEL = { pending: "Not settled", not_sent: "Not sent", failed: "F
 // (client, 25 Nov 2026: "it shows an error, not clear what to do").
 function shopifyFix(m, product) {
   const err = String(m.shopify_error || "");
-  if (!product?.shopify_product_id) return "This design is app-only (not on Shopify): nothing to send. It will clear by itself.";
+  if (!product?.shopify_product_id) return "This design is not linked to Shopify yet. Open it, add its Shopify product ID in Edit (or create it on Shopify first), then send again.";
   if (/not linked to a Shopify variant/i.test(err)) return "This size is missing on Shopify. Add the size to the design in Shopify admin (or check the size name matches), then send again.";
   if (/no inventory item|not stocked/i.test(err)) return "In Shopify admin, open this size and turn on Track quantity (stocked at the LXRTS location), then send again.";
   if (/several Shopify locations/i.test(err)) return "This size is stocked at more than one Shopify location. Ask the developer to set the LXRTS location.";
