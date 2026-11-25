@@ -1,8 +1,25 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Topline, ProductCell, Badge } from "./StockRoomUi";
 import { formatUnits, formatDay, sizeLabel, TYPE_LABELS, REASON_LABELS, productType } from "./stockRoomModel";
 import { retryShopify, SHOPIFY_SYNC_ON } from "./stockRoomShopify";
 import { loadShopifyStockIssues, loadShopifySyncState, retryShopifyChange } from "../../utils/shopifyInventory";
+
+// Click a design anywhere on this screen to open it (stock, sizes, editor)
+// and fix it there (client, 25 Nov 2026), instead of finding it again in
+// Catalogue or Stock.
+const OpenDesign = createContext(null);
+function DesignCell({ product }) {
+  const ctx = useContext(OpenDesign);
+  if (!product) return "Product no longer live";
+  if (!ctx?.open || !ctx.rowsById?.[product.id]) return <ProductCell product={product} />;
+  return (
+    <button type="button" className="sri-open" title="Open this design to fix it"
+      onClick={(e) => { e.stopPropagation(); ctx.open(product.id); }}>
+      <ProductCell product={product} />
+      <span className="sri-open-cue">Open ›</span>
+    </button>
+  );
+}
 
 // Findings in the existing product data. Each section names the rows so they
 // can be corrected: most in the product editor (click the row), an impossible
@@ -51,7 +68,7 @@ function Rows({ sectionKey, items, onRecount, rowsById }) {
   if (sectionKey === "duplicateShopifyIds") {
     return items.flatMap((dup) => dup.products.map((p) => (
       <tr key={`${dup.shopifyId}-${p.id}`} data-product={p.id}>
-        <td className="is-primary"><ProductCell product={p} /></td>
+        <td className="is-primary"><DesignCell product={p} /></td>
         <td data-label="Shared Shopify ID" className="sr-mono wrap">{dup.shopifyId}</td>
         <td data-label="Store">{p.store_category || "All Stores"}</td>
         <td data-label="On hand" className="n">{rowsById?.[p.id]?.stock.tracked ? formatUnits(rowsById[p.id].stock.total) : "—"}</td>
@@ -61,7 +78,7 @@ function Rows({ sectionKey, items, onRecount, rowsById }) {
   if (sectionKey === "invalidVariants") {
     return items.map(({ product, size, qty }, i) => (
       <tr key={`${product.id}-${size}-${i}`}>
-        <td className="is-primary"><ProductCell product={product} /></td>
+        <td className="is-primary"><DesignCell product={product} /></td>
         <td data-label="Size">{size}</td>
         <td data-label="Stored count" className="n">{formatUnits(qty)}</td>
         <td>{onRecount && <button type="button" className="sr-rowbtn" onClick={() => onRecount(product.id, size)}>Recount</button>}</td>
@@ -71,7 +88,7 @@ function Rows({ sectionKey, items, onRecount, rowsById }) {
   if (sectionKey === "duplicateSizes") {
     return items.map(({ product, sizes }) => (
       <tr key={product.id} data-product={product.id}>
-        <td className="is-primary"><ProductCell product={product} /></td>
+        <td className="is-primary"><DesignCell product={product} /></td>
         <td data-label="Stored more than once" className="wrap is-wide">
           <span className="sr-szc-list">
             {sizes.map(({ size, counts }) => (
@@ -84,7 +101,7 @@ function Rows({ sectionKey, items, onRecount, rowsById }) {
   }
   return items.map((p) => (
     <tr key={p.id} data-product={p.id}>
-      <td className="is-primary"><ProductCell product={p} /></td>
+      <td className="is-primary"><DesignCell product={p} /></td>
       <td data-label="Type">{TYPE_LABELS[productType(p)]}</td>
       {sectionKey !== "lxrtsWithoutVariants" && (
         <td data-label={sectionKey === "malformedShopifyIds" ? "Stored ID" : "Stored count"} className="sr-mono">
@@ -106,6 +123,19 @@ const HEADS = {
 };
 
 const SHOPIFY_LABEL = { pending: "Not settled", not_sent: "Not sent", failed: "Failed" };
+
+// What the team should do about a line Shopify refused, in plain words
+// (client, 25 Nov 2026: "it shows an error, not clear what to do").
+function shopifyFix(m, product) {
+  const err = String(m.shopify_error || "");
+  if (!product?.shopify_product_id) return "This design is not linked to Shopify yet. Open it, add its Shopify product ID in Edit (or create it on Shopify first), then send again.";
+  if (/not linked to a Shopify variant/i.test(err)) return "This size is missing on Shopify. Add the size to the design in Shopify admin (or check the size name matches), then send again.";
+  if (/no inventory item|not stocked/i.test(err)) return "In Shopify admin, open this size and turn on Track quantity (stocked at the LXRTS location), then send again.";
+  if (/several Shopify locations/i.test(err)) return "This size is stocked at more than one Shopify location. Ask the developer to set the LXRTS location.";
+  if (/No answer from Shopify|kept changing|timed? ?out|fetch/i.test(err)) return "Shopify did not answer. Check this size's stock on Shopify, then send again.";
+  if (m.shopify_status === "failed") return err ? `Shopify said: ${err}` : "Shopify refused the change. Check the design on Shopify, then send again.";
+  return "Not sent yet: press Send to Shopify now.";
+}
 
 function ShopifyUnsent({ view, canWrite, onShopifyRetried }) {
   const ledger = view.ledger;
@@ -138,23 +168,24 @@ function ShopifyUnsent({ view, canWrite, onShopifyRetried }) {
       </div>
       <p className="sr-card-sub">
         {SHOPIFY_SYNC_ON
-          ? "These LXRTS stock changes were saved here but did not reach Shopify, so the order form may still show the old stock. Send them, or correct Shopify by hand."
+          ? "These LXRTS stock changes were saved here but did not reach Shopify, so the website may still show the old stock. Each line says what to do; after fixing it on Shopify, press Send to Shopify now."
           : "Shopify is not updated from this environment, so these LXRTS changes were saved here only. That is expected while testing: the live store is untouched."}
       </p>
       <div className="sr-scroller">
-        <table className="sr-table sr-rtable" style={{ "--sr-table-min": "820px" }}>
-          <thead><tr><th>Design</th><th>When</th><th>Type</th><th>Size</th><th className="n">Shopify should change by</th><th>Status</th></tr></thead>
+        <table className="sr-table sr-rtable" style={{ "--sr-table-min": "1080px" }}>
+          <thead><tr><th>Design</th><th>When</th><th>Type</th><th>Size</th><th className="n">Shopify should change by</th><th>Status</th><th>What to do</th></tr></thead>
           <tbody>
             {rows.slice(0, 50).map((m) => {
               const p = view.productsById[m.product_id];
               return (
                 <tr key={m.id}>
-                  <td className="is-primary">{p ? <ProductCell product={p} /> : "Product no longer live"}</td>
+                  <td className="is-primary"><DesignCell product={p} /></td>
                   <td data-label="When">{formatDay(m.occurred_at)}</td>
                   <td data-label="Type">{REASON_LABELS[m.reason] || m.reason}</td>
                   <td data-label="Size">{m.size ? sizeLabel(m.size) : "—"}</td>
                   <td data-label="Change" className={`n tot ${m.legacy_delta > 0 ? "sr-pos" : "sr-neg"}`}>{m.legacy_delta > 0 ? "+" : ""}{m.legacy_delta}</td>
                   <td data-label="Status" title={m.shopify_error || undefined}><Badge tone={m.shopify_status === "failed" ? "crit" : "low"}>{SHOPIFY_LABEL[m.shopify_status]}</Badge></td>
+                  <td data-label="What to do" className="wrap" style={{ minWidth: 260, fontSize: 13 }}>{shopifyFix(m, p)}</td>
                 </tr>
               );
             })}
@@ -224,7 +255,7 @@ function ShopifySyncIssues({ view, canWrite, onShopifyRetried }) {
                 const change = m.action === "set" ? `set to ${m.requested_quantity}` : `${m.requested_change > 0 ? "+" : ""}${m.requested_change}`;
                 return (
                   <tr key={m.id}>
-                    <td className="is-primary">{p ? <ProductCell product={p} /> : "Product no longer live"}</td>
+                    <td className="is-primary"><DesignCell product={p} /></td>
                     <td data-label="When">{formatDay(m.created_at)}</td>
                     <td data-label="From">{SOURCE_LABEL[m.source] || m.source || "—"}{m.order_no ? ` · ${m.order_no}` : ""}</td>
                     <td data-label="Size">{m.size ? sizeLabel(m.size) : "—"}</td>
@@ -246,14 +277,14 @@ function ShopifySyncIssues({ view, canWrite, onShopifyRetried }) {
   );
 }
 
-export default function IntegrityScreen({ view, canWrite, canEditProducts, openEditor, openAction, onShopifyRetried }) {
+export default function IntegrityScreen({ view, canWrite, canEditProducts, openEditor, openAction, openProduct, onShopifyRetried }) {
   const recount = canWrite ? (productId, size) => openAction("adjust", { locationId: "", lines: [{ productId, size }] }) : null;
   const { findings } = view;
   const withItems = SECTIONS.filter((s) => findings[s.key].length);
   const unsent = view.ledger?.installed ? view.ledger.shopifyUnsent.length : 0;
 
   return (
-    <>
+    <OpenDesign.Provider value={{ open: openProduct, rowsById: view.rowsById }}>
       <Topline title="Integrity"
         sub={view.integrityTotal || unsent
           ? `${formatUnits(view.integrityTotal)} findings in the product data${unsent ? ` · ${formatUnits(unsent)} Shopify changes not sent` : ""}`
@@ -296,6 +327,6 @@ export default function IntegrityScreen({ view, canWrite, canEditProducts, openE
           <div className="sr-card"><p className="sr-empty">Every check passes: Shopify IDs are unique and valid, every LXRTS size has one sensible count, and every LXRTS design has sizes.</p></div>
         )}
       </div>
-    </>
+    </OpenDesign.Provider>
   );
 }

@@ -188,6 +188,13 @@
 .sr .sr-linkbtn { border: 0; background: none; padding: 0; font-size: 12.5px; color: var(--sr-gold-deep) !important; font-weight: 600; cursor: pointer; }
 .sr .sr-linkbtn:hover { text-decoration: underline; }
 .sr .sr-linkbtn:focus-visible { outline: 2px solid var(--sr-gold); outline-offset: 2px; border-radius: 3px; }
+/* Integrity: a design you can open to fix it (Release 39). */
+.sr .sri-open { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 4px 6px; margin: -4px -6px; border: 0; border-radius: 8px; background: none; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.sr .sri-open:hover { background: var(--sr-gold-soft); }
+.sr .sri-open:focus-visible { outline: 2px solid var(--sr-gold); outline-offset: 1px; }
+.sr .sri-open-cue { flex-shrink: 0; font-size: 12px; font-weight: 600; color: var(--sr-gold-deep) !important; opacity: 0; transition: opacity .15s; }
+.sr .sri-open:hover .sri-open-cue, .sr .sri-open:focus-visible .sri-open-cue { opacity: 1; }
+@media (hover: none) { .sr .sri-open-cue { opacity: 1; } }
 
 .sr .sr-seg { display: flex; gap: 2px; background: var(--sr-card-2); border: 1px solid var(--sr-border-2); border-radius: 999px; padding: 3px; flex-wrap: wrap; }
 .sr .sr-seg button { border: 0; background: none; cursor: pointer; font-size: 12.5px; color: var(--sr-ink-3) !important; padding: 5px 12px; border-radius: 999px; transition: background .15s, color .15s; }
