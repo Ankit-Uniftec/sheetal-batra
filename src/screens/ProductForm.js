@@ -2175,6 +2175,9 @@ export default function ProductForm() {
       size: selectedSize,
       quantity: quantity,
       price: getBasePrice(), // CHANGE #1: Use base price without extras
+      // Part of the price that takes no % discount (a "with dupatta / potli"
+      // design's dupatta or potli charge; client sheet, 26 Nov 2026). Per unit.
+      discount_exempt: Number(selectedProduct.discount_exempt_amount) || 0,
       measurements: getRelevantMeasurements(),
       image_url: selectedProduct.image_url || selectedProduct.image || null,
       notes: comments, // Initialize notes as empty for new products
@@ -2779,6 +2782,7 @@ export default function ProductForm() {
         size: selectedSize,
         quantity,
         price: getBasePrice(), // Use base price
+        discount_exempt: Number(selectedProduct.discount_exempt_amount) || 0, // no % discount on this part (per unit)
         measurements: getRelevantMeasurements(),
         image_url: selectedProduct.image_url || selectedProduct.image || null,
         notes: comments, // Initialize notes as empty for auto-added products
