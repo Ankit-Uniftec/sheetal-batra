@@ -418,7 +418,7 @@ export default function StockRoom() {
         {screen === "movements" && <MovementsScreen {...screenProps} />}
         {screen === "transfers" && <TransfersScreen key={screenOpts.nonce} {...screenProps} initialStatus={screenOpts.status} />}
         {screen === "halfmade" && <div className="sr-body"><HalfMadeTab /></div>}
-        {screen === "products" && <ProductsScreen {...screenProps} />}
+        {screen === "products" && <ProductsScreen {...screenProps} onBulkDone={finishDialog} />}
         {screen === "integrity" && <IntegrityScreen {...screenProps} onShopifyRetried={finishDialog} />}
       </main>
 

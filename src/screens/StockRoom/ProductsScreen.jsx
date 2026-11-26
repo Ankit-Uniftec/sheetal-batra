@@ -8,6 +8,7 @@ import { formatUnits, formatInr, sizeLabel, SIZE_SCALE, CUSTOM_SIZE, TYPE_LABELS
 import { loadProductsForExport } from "./stockRoomData";
 import { CSV_COLUMNS, buildCsv, downloadCsv } from "../../components/AddProduct/csvHelpers";
 import { shopifyNumber } from "../../utils/shopifyInventory";
+import NoDiscountBulk from "./NoDiscountBulk";
 
 // The Shopify ID moved into the product's detail view: a 34-character GID in
 // every row pushed the useful columns off-screen on anything but a wide monitor.
@@ -33,6 +34,7 @@ const DATA_STATES = [
   { value: "noVariants", label: "LXRTS with no sizes in stock records" },
   { value: "noSizes", label: "No sizes listed" },
   { value: "noCollection", label: "In no collection" },
+  { value: "noDiscount", label: "Has a no-discount amount" },
 ];
 
 const EXPORT_STOCK = [
@@ -48,7 +50,7 @@ const EXPORT_STOCK = [
 async function downloadProductsCsv(view, rows) {
   const shown = new Set(rows.map((r) => r.id));
   const full = (await loadProductsForExport()).filter((p) => shown.has(p.id));
-  const headers = [...CSV_COLUMNS, "type", "on_hand", "shopify_product_id"];
+  const headers = [...CSV_COLUMNS, "type", "on_hand", "shopify_product_id", "no_discount_amount"];
   const data = full.map((p) => {
     const r = view.rowsById[p.id];
     return {
@@ -61,6 +63,7 @@ async function downloadProductsCsv(view, rows) {
       inventory: r?.type === TYPE_MTO || Number(p.inventory) >= 9999 ? "MTO" : p.inventory,
       type: r ? TYPE_LABELS[r.type] : "", on_hand: r?.stock.tracked && !r.stock.unlimited ? r.stock.total : "",
       shopify_product_id: p.shopify_product_id || "",
+      no_discount_amount: Math.round(Number(p.discount_exempt_amount) || 0),
     };
   });
   downloadCsv(`products-export-${new Date().toISOString().slice(0, 10)}.csv`, buildCsv(headers, data));
@@ -158,7 +161,8 @@ function ExportProductsForm({ view, onClose, onDone }) {
   );
 }
 
-export default function ProductsScreen({ view, openProduct, canEditProducts, openEditor, openImport }) {
+export default function ProductsScreen({ view, openProduct, canEditProducts, openEditor, openImport, onBulkDone }) {
+  const [bulkNoDiscount, setBulkNoDiscount] = useState(false);
   const ledger = view.ledger;
   const [search, setSearch] = useState("");
   const [drawer, setDrawer] = useState(false);
@@ -201,6 +205,7 @@ export default function ProductsScreen({ view, openProduct, canEditProducts, ope
     if (dataState === "noVariants" && !flagged.noVariants.has(r.id)) return false;
     if (dataState === "noSizes" && r.stock.sizes.length) return false;
     if (dataState === "noCollection" && (ledger?.collectionsByProduct?.[r.id] || []).length) return false;
+    if (dataState === "noDiscount" && !(Number(r.product.discount_exempt_amount) > 0)) return false;
     if (store && ((r.product.store_category || "").trim() || "All Stores") !== store) return false;
     if (status && r.status !== status) return false;
     if (collection && !(ledger?.collectionsByProduct?.[r.id] || []).includes(collection)) return false;
@@ -229,6 +234,7 @@ export default function ProductsScreen({ view, openProduct, canEditProducts, ope
         {canEditProducts && (
           <>
             <button type="button" className="sr-btn" onClick={() => openImport("products")}><Icon name="upload" width={1.7} />Import CSV</button>
+            <button type="button" className="sr-btn" onClick={() => setBulkNoDiscount(true)}>No-discount amounts</button>
             <button type="button" className="sr-btn sr-btn-primary" onClick={() => openEditor(null)}><Icon name="plus" width={2} />Add product</button>
           </>
         )}
@@ -314,6 +320,10 @@ export default function ProductsScreen({ view, openProduct, canEditProducts, ope
             </div>
           )}
         </FilterDrawer>
+      )}
+      {bulkNoDiscount && (
+        <NoDiscountBulk view={view} onClose={() => setBulkNoDiscount(false)}
+          onDone={(result) => { setBulkNoDiscount(false); onBulkDone?.(result); }} />
       )}
       {exporting && (
         <ExportProductsForm view={view} onClose={() => setExporting(false)}
