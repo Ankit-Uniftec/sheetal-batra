@@ -221,13 +221,18 @@ export default function OrderDetails() {
     [order?.grand_total]
   );
 
-  // Calculate extras total from all items (discount should NOT apply on extras)
+  // Amount that takes no % discount: every item's extras, plus the part of a
+  // "with dupatta / potli" design's price that is the dupatta / potli charge
+  // (item.discount_exempt, per unit; client, 26 Nov 2026). Never shown; it only
+  // lowers the base the % codes (and SHOPMORE minimums) are worked out on.
   const extrasTotal = useMemo(() => {
     const items = order?.items || [];
     return items.reduce((total, item) => {
       const itemExtras = item.extras || [];
       const itemExtrasTotal = itemExtras.reduce((sum, extra) => sum + (Number(extra.price) || 0), 0);
-      return total + itemExtrasTotal;
+      const qty = Number(item.quantity) || 1;
+      const exempt = Math.min(Math.max(0, Number(item.discount_exempt) || 0), Number(item.price) || 0) * qty;
+      return total + itemExtrasTotal + exempt;
     }, 0);
   }, [order?.items]);
 
