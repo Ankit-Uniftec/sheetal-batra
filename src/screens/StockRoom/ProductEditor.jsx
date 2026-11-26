@@ -4,6 +4,7 @@ import { FormSection, PField, FieldRow, Combo, MultiSelect, Switch, Pills } from
 import {
   loadProductFormOptions, loadProductForEdit, loadLiveProductNames, findShopifyIdUsers, fetchNextSku,
   createProduct, updateProduct, createCollection, setProductCollections, placeStock, newRequestId,
+  setNoDiscountAmounts,
 } from "./stockRoomData";
 import { readShopifyStock } from "./stockRoomShopify";
 import { checkDuplicateName, SIZE_OPTIONS } from "../../components/AddProduct/csvHelpers";
@@ -58,6 +59,10 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
   const [sku, setSku] = useState("");
   const [name, setName] = useState("");
   const [basePrice, setBasePrice] = useState("");
+  // Part of the price that % discount codes leave out (Release 39), e.g. a
+  // dupatta or potli charge. Never shown to clients or on the order form.
+  const [noDiscount, setNoDiscount] = useState("0");
+  const [applyTwin, setApplyTwin] = useState(true);
   const [imageUrl, setImageUrl] = useState("");
   const [storeCategory, setStoreCategory] = useState(DEFAULT_STORE_CATEGORY);
   const [collectionIds, setCollectionIds] = useState([]);
@@ -100,6 +105,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
         setSku(product.sku_id || "");
         setName(product.name || "");
         setBasePrice(product.base_price != null ? String(product.base_price) : "");
+        setNoDiscount(String(Math.round(Number(product.discount_exempt_amount) || 0)));
         setImageUrl(product.image_url || "");
         setStoreCategory(product.store_category || DEFAULT_STORE_CATEGORY);
         setTops(product.top_options || []);
@@ -163,6 +169,17 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
   const grandTotal = onSizes.reduce((a, s) => a + rowTotal(s), 0);
 
   // Other designs' Shopify IDs and variant IDs, for the clash checks.
+  // The same design in its other form: "X (LXRTS)" for a made-to-order "X" and
+  // the other way round (names compared without case, punctuation or "LXRTS").
+  const nameKey = (n) => String(n || "").toLowerCase().replace(/\(\s*lxrts\s*\)|lxrts/g, " ").replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+  const twin = useMemo(() => {
+    if (!isEdit || !name.trim() || (type !== TYPE_LXRTS && type !== TYPE_MTO)) return null;
+    const key = nameKey(name);
+    const wantLx = type !== TYPE_LXRTS;
+    const found = view.rows.filter((r) => r.id !== productId && nameKey(r.product.name) === key && (r.type === TYPE_LXRTS) === wantLx);
+    return found.length === 1 ? found[0] : null;
+  }, [isEdit, name, type, view.rows, productId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const otherShopifyUsers = (gid) => view.rows.filter((r) => r.id !== productId && r.product.shopify_product_id
     && normalizeShopifyId(r.product.shopify_product_id, "Product") === gid);
   const otherVariantIds = useMemo(() => {
@@ -223,6 +240,9 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
     if (!name.trim()) return "Give the design a name.";
     const price = Number(basePrice);
     if (!basePrice || !Number.isFinite(price) || price <= 0) return "Enter a retail price.";
+    const nd = Number(noDiscount || 0);
+    if (!Number.isInteger(nd) || nd < 0) return "The no-discount amount must be a whole number of rupees, 0 or more.";
+    if (nd >= price) return "The no-discount amount must be less than the retail price.";
     if (!onSizes.length) return "Mark at least one size this design is made in.";
     if (defaultColor && options.colors.length && !options.colors.some((c) => c.name === defaultColor)) return "Choose the default colour from the list.";
     if (showStock) {
@@ -281,6 +301,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
         store_category: storeCategory || DEFAULT_STORE_CATEGORY,
         has_dupatta: hasDupatta === "yes",
         default_dupatta_color: hasDupatta === "yes" ? (dupattaColor.trim() || defaultColor.trim() || null) : null,
+        discount_exempt_amount: Math.round(Number(noDiscount || 0)),
       };
       const variantId = (s) => normalizeShopifyId(grid[s].vid, "ProductVariant") || null;
 
@@ -325,6 +346,15 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
         await setProductCollections(saved.id, collectionIds, isEdit ? (ledger.collectionsByProduct[productId] || []) : []);
       }
 
+      // The matching LXRTS / made-to-order design gets the same no-discount amount.
+      let twinNote = "";
+      if (twin && applyTwin && Math.round(Number(twin.product.discount_exempt_amount) || 0) !== Math.round(Number(noDiscount || 0))) {
+        const t = await setNoDiscountAmounts([{ id: twin.id, amount: noDiscount }]);
+        twinNote = t.failed.length
+          ? ` The no-discount amount could not be copied to ${twin.product.name} (${t.failed[0]}).`
+          : ` No-discount amount also set on ${twin.product.name} (${twin.product.sku_id}).`;
+      }
+
       // Opening stock in locations: the product exists now, so each location is
       // a normal placement. A failure leaves those pieces unassigned, never lost.
       let placedNote = "";
@@ -349,7 +379,7 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
       const summary = isEdit
         ? `“${saved.name}” saved.`
         : `“${saved.name}” (${saved.sku_id}) created · ${plural(onSizes.length, "size")}${showStock ? (grandTotal ? ` · ${plural(grandTotal, "unit")} of opening stock` : " · no opening stock") : ""}`;
-      onDone({ text: `${summary}${renamed}${placedNote}`, tone: placeFailed ? "crit" : renamed ? "warn" : "ok" });
+      onDone({ text: `${summary}${renamed}${placedNote}${twinNote}`, tone: placeFailed ? "crit" : renamed ? "warn" : "ok" });
     } catch (e) {
       setError(e.message);
       setSubmitting(false);
@@ -532,6 +562,21 @@ export default function ProductEditor({ productId, view, onClose, onDone }) {
         <PField label="Retail Price (₹)" htmlFor="pf-price">
           <input id="pf-price" className="sr-input" type="number" min="1" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} placeholder="185000" />
         </PField>
+      </FieldRow>
+      <FieldRow>
+        <PField label="No-discount amount (₹)" htmlFor="pf-nodiscount"
+          help="Part of the price that % discount codes leave out, e.g. a dupatta or potli charge. Leave 0 for a normal design. Applies to new orders; clients never see it.">
+          <input id="pf-nodiscount" className="sr-input" type="number" min="0" step="1" value={noDiscount}
+            onChange={(e) => setNoDiscount(e.target.value)} placeholder="0" />
+        </PField>
+        {twin ? (
+          <PField label="Matching design" htmlFor="pf-twin" help={`${twin.product.name} (${twin.product.sku_id}) · now ₹${Math.round(Number(twin.product.discount_exempt_amount) || 0).toLocaleString("en-IN")}`}>
+            <label className="sr-check" htmlFor="pf-twin" style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 40 }}>
+              <input id="pf-twin" type="checkbox" checked={applyTwin} onChange={(e) => setApplyTwin(e.target.checked)} />
+              Also apply to the matching {twin.type === TYPE_LXRTS ? "LXRTS" : "made-to-order"} design
+            </label>
+          </PField>
+        ) : <div />}
       </FieldRow>
       <FieldRow>
         <PField label="Listed For" htmlFor="pf-store" help="Which stores' associates see this design. Factory One hides it from every store.">

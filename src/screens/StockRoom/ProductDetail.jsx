@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { loadProductChanges } from "./stockRoomData";
 import { Modal, StockBadge, Badge, Icon, Seg } from "./StockRoomUi";
 import {
   formatUnits, formatInr, formatDay, sizeLabel, sortSizes, canonicalSize, productFacts, SIZE_SCALE,
@@ -64,6 +65,13 @@ function FactsPivot({ facts, rowsBy, locationOrder }) {
 export default function ProductDetail({ row, view, warehousesById, salesDays = 90, onClose, openAction, canWrite, canEditProducts, openEditor, openLabels, piece }) {
   const p = row.product;
   const ledger = view.ledger;
+  // Price / no-discount amount history (Release 39).
+  const [changes, setChanges] = useState([]);
+  useEffect(() => {
+    let off = false;
+    loadProductChanges(row.id).then((c) => { if (!off) setChanges(c); });
+    return () => { off = true; };
+  }, [row.id]);
   const salesBySize = useMemo(() => (view.sales && view.sales.byProduct[row.id] ? view.sales.byProduct[row.id].bySize : {}), [view.sales, row.id]);
   const legacy = view.legacyByProduct[row.id] || [];
   const counted = row.stock.tracked && !row.stock.unlimited;
@@ -119,6 +127,9 @@ export default function ProductDetail({ row, view, warehousesById, salesDays = 9
       <Badge tone="plain">{(p.store_category || "").trim() || "All Stores"}</Badge>
       <StockBadge status={row.status} />
       {row.type === TYPE_LXRTS && <span className="sr-mono">{p.shopify_product_id ? `Shopify ${shopifyNumber(p.shopify_product_id)}` : "No Shopify ID"}</span>}
+      {Number(p.discount_exempt_amount) > 0 && (
+        <Badge tone="plain">No discount on ₹{Math.round(Number(p.discount_exempt_amount)).toLocaleString("en-IN")}</Badge>
+      )}
       {collections.map((c) => <Badge key={c.id} tone="gold">{c.name}</Badge>)}
     </>
   );
@@ -352,6 +363,24 @@ export default function ProductDetail({ row, view, warehousesById, salesDays = 9
                   <td>{m.location_id ? ledger.locationsById[m.location_id]?.name || "Closed location" : "Unassigned"}</td>
                   <td className={`n tot ${m.delta > 0 ? "sr-pos" : "sr-neg"}`}>{m.delta > 0 ? "+" : ""}{m.delta}</td>
                   <td className="wrap sr-muted">{m.ref_id || m.note || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {changes.length > 0 && (
+        <>
+          <div className="sr-section-head"><h3>Price history</h3></div>
+          <table className="sr-table" style={{ "--sr-table-min": "0px" }}>
+            <tbody>
+              {changes.map((c) => (
+                <tr key={c.id}>
+                  <td className="sr-muted">{formatDay(c.changed_at)}</td>
+                  <td>{c.field === "base_price" ? "Retail price" : "No-discount amount"}</td>
+                  <td className="n">₹{Math.round(Number(c.old_value) || 0).toLocaleString("en-IN")} → <b>₹{Math.round(Number(c.new_value) || 0).toLocaleString("en-IN")}</b></td>
+                  <td className="wrap sr-muted">{c.changed_by || ""}</td>
                 </tr>
               ))}
             </tbody>

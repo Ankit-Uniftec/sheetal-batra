@@ -32,7 +32,7 @@ export const STOCK_ROOM_ROLES = ["inventory", "admin", "assistant_cmo", "gm", "c
 // these are confirmed present on both staging and production.
 const PRODUCT_COLUMNS =
   "id, name, sku_id, image_url, base_price, store_category, sync_enabled, is_custom_piece, inventory, available_size, shopify_product_id, " +
-  "top_options, bottom_options, default_top, default_bottom, default_color, has_dupatta, default_dupatta_color";
+  "top_options, bottom_options, default_top, default_bottom, default_color, has_dupatta, default_dupatta_color, discount_exempt_amount";
 // Stock order cards need these (StockOrdersTab.jsx shows the same fields);
 // order_no is enough for getOrderChannelKey on a stock order.
 const STOCK_ORDER_COLUMNS =
@@ -265,6 +265,34 @@ export async function loadProductFormOptions() {
 }
 
 /** The full product row and its size rows, for editing. */
+/**
+ * Set the no-discount amount on designs (Release 39): the part of the price
+ * that % discount codes leave out, e.g. a dupatta or potli charge. Used for a
+ * design's matching LXRTS / made-to-order twin and by the bulk CSV update.
+ * @param {Array<{ id: string, amount: number }>} rows
+ * @returns {Promise<{ saved: number, failed: string[] }>}
+ */
+export async function setNoDiscountAmounts(rows) {
+  let saved = 0;
+  const failed = [];
+  for (const r of rows || []) {
+    const { error } = await supabase.from("products").update({ discount_exempt_amount: Math.max(0, Math.round(Number(r.amount) || 0)) }).eq("id", r.id);
+    if (error) failed.push(error.message); else saved += 1;
+  }
+  return { saved, failed };
+}
+
+/**
+ * The latest price / no-discount amount changes of one design (db r39_29).
+ * Empty (never an error) when the history table is not set up yet.
+ */
+export async function loadProductChanges(productId, limit = 10) {
+  const { data, error } = await supabase.from("product_change_log")
+    .select("id, field, old_value, new_value, changed_by, changed_at")
+    .eq("product_id", productId).order("changed_at", { ascending: false }).limit(limit);
+  return error ? [] : (data || []);
+}
+
 export async function loadProductForEdit(productId) {
   const { data: product, error } = await supabase.from("products").select("*").eq("id", productId).single();
   if (error) throw new Error(`Could not open this product: ${error.message}`);
