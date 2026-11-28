@@ -73,10 +73,17 @@ export default function OtpVerification() {
       }
     );
 
-    const result = await response.json();
+    // Read as text first: if anything upstream answers with an error page, the
+    // store sees a plain message, never raw "Unexpected token '<'" text.
+    const text = await response.text();
+    let result = null;
+    try { result = JSON.parse(text); } catch { result = null; }
 
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || "Failed to send OTP");
+    if (!response.ok || !result?.success) {
+      const msg = typeof result?.error === "string" && !result.error.includes("<") && !/unexpected token|not valid json/i.test(result.error)
+        ? result.error
+        : "Couldn't send the OTP on WhatsApp right now. Please try again in a minute.";
+      throw new Error(msg);
     }
 
     return result;
@@ -218,7 +225,7 @@ export default function OtpVerification() {
           });
         } else {
           showPopup({
-            title: "Failed to send OTP",
+            title: "Couldn't send OTP",
             message: otpError.message || "Could not send OTP. Please try again.",
             type: "error",
             confirmText: "Ok",
